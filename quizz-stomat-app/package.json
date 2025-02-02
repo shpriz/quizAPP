@@ -10,8 +10,15 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@types/react-bootstrap": "^0.32.37",
+    "@types/xlsx": "^0.0.35",
+    "bootstrap": "^5.3.3",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-bootstrap": "^2.10.9",
+    "react-dom": "^18.3.1",
+    "react-router": "^7.1.5",
+    "react-router-dom": "^7.1.5",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
