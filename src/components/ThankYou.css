@@ -1,0 +1,68 @@
+.thank-you-container {
+  padding: 2rem;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.thank-you-card {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+  background-color: #ffffff;
+}
+
+.results-section {
+  margin: 2rem 0;
+  text-align: left;
+  padding: 1rem;
+}
+
+.test-result {
+  margin-bottom: 2rem;
+  padding: 1rem;
+  border: 1px solid #e0e0e0;
+  border-radius: 5px;
+  background-color: #f8f9fa;
+}
+
+.test-result h4 {
+  color: #2c3e50;
+  margin-bottom: 1rem;
+}
+
+.test-result p {
+  margin: 0.5rem 0;
+  color: #34495e;
+}
+
+.buttons-container {
+  margin: 2rem 0;
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.thank-you-button {
+  min-width: 200px;
+  padding: 0.75rem 1.5rem;
+}
+
+.download-note {
+  margin-top: 2rem;
+  color: #666;
+}
+
+.download-link {
+  color: #007bff;
+  text-decoration: none;
+  margin-left: 0.5rem;
+}
+
+.download-link:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 576px) {
+  .buttons-container {
+    flex-direction: column;
+  }
+}

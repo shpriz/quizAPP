@@ -1,0 +1,119 @@
+.fa-solid--tooth {
+  display: inline-block;
+  width: 28px;
+  height: 32px;
+  background-color: hsl(171, 100%, 41%);
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 448 512'%3E%3Cpath fill='%23000' d='M443.98 96.25c-11.01-45.22-47.11-82.06-92.01-93.72c-32.19-8.36-63 5.1-89.14 24.33c-3.25 2.39-6.96 3.73-10.5 5.48l28.32 18.21c7.42 4.77 9.58 14.67 4.8 22.11c-4.46 6.95-14.27 9.86-22.11 4.8L162.83 12.84c-20.7-10.85-43.38-16.4-66.81-10.31c-44.9 11.67-81 48.5-92.01 93.72c-10.13 41.62-.42 80.81 21.5 110.43c23.36 31.57 32.68 68.66 36.29 107.35c4.4 47.16 10.33 94.16 20.94 140.32l7.8 33.95c3.19 13.87 15.49 23.7 29.67 23.7c13.97 0 26.15-9.55 29.54-23.16l34.47-138.42c4.56-18.32 20.96-31.16 39.76-31.16s35.2 12.85 39.76 31.16l34.47 138.42c3.39 13.61 15.57 23.16 29.54 23.16c14.18 0 26.48-9.83 29.67-23.7l7.8-33.95c10.61-46.15 16.53-93.16 20.94-140.32c3.61-38.7 12.93-75.78 36.29-107.35c21.95-29.61 31.66-68.8 21.53-110.43'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 448 512'%3E%3Cpath fill='%23000' d='M443.98 96.25c-11.01-45.22-47.11-82.06-92.01-93.72c-32.19-8.36-63 5.1-89.14 24.33c-3.25 2.39-6.96 3.73-10.5 5.48l28.32 18.21c7.42 4.77 9.58 14.67 4.8 22.11c-4.46 6.95-14.27 9.86-22.11 4.8L162.83 12.84c-20.7-10.85-43.38-16.4-66.81-10.31c-44.9 11.67-81 48.5-92.01 93.72c-10.13 41.62-.42 80.81 21.5 110.43c23.36 31.57 32.68 68.66 36.29 107.35c4.4 47.16 10.33 94.16 20.94 140.32l7.8 33.95c3.19 13.87 15.49 23.7 29.67 23.7c13.97 0 26.15-9.55 29.54-23.16l34.47-138.42c4.56-18.32 20.96-31.16 39.76-31.16s35.2 12.85 39.76 31.16l34.47 138.42c3.39 13.61 15.57 23.16 29.54 23.16c14.18 0 26.48-9.83 29.67-23.7l7.8-33.95c10.61-46.15 16.53-93.16 20.94-140.32c3.61-38.7 12.93-75.78 36.29-107.35c21.95-29.61 31.66-68.8 21.53-110.43'/%3E%3C/svg%3E");
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+}
+
+.welcome-container {
+  padding: 2rem;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.welcome-card {
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+  background-color: #fff;
+}
+
+.quiz-description {
+  font-size: 1.1rem;
+  line-height: 1.6;
+  color: #333;
+}
+
+.quiz-description p {
+  margin-bottom: 1.5rem;
+}
+
+.tooth-icon::before {
+  content: "🦷";
+  margin-right: 0.5rem;
+  font-size: 1.2rem;
+}
+
+.rules {
+  margin-top: 2rem;
+  padding: 1rem;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+}
+
+.no-time-limit {
+  font-weight: bold;
+  text-align: center;
+  color: #0056b3;
+  margin-top: 1rem;
+}
+
+.start-button {
+  background-color: #0056b3;
+  color: white;
+  padding: 0.75rem 2rem;
+  font-size: 1.2rem;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.start-button:hover {
+  background-color: #004494;
+}
+
+.user-form {
+  max-width: 500px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.user-form .form-label {
+  font-weight: 500;
+  color: #333;
+}
+
+.user-form .form-control {
+  padding: 0.75rem;
+  font-size: 1rem;
+  border-radius: 5px;
+  border: 1px solid #ced4da;
+}
+
+.user-form .form-control:focus {
+  border-color: #0056b3;
+  box-shadow: 0 0 0 0.2rem rgba(0, 86, 179, 0.25);
+}
+
+.user-form .btn {
+  padding: 0.5rem 1.5rem;
+  font-size: 1rem;
+  border-radius: 5px;
+  transition: all 0.3s ease;
+}
+
+.user-form .btn-secondary {
+  background-color: #6c757d;
+  border-color: #6c757d;
+}
+
+.user-form .btn-secondary:hover {
+  background-color: #5a6268;
+  border-color: #545b62;
+}
+
+.user-form .btn-primary {
+  background-color: #0056b3;
+  border-color: #0056b3;
+}
+
+.user-form .btn-primary:hover {
+  background-color: #004494;
+  border-color: #003d7a;
+}
