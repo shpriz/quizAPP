@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Тестирование СГМУ (с) 2024</title>
+    <link rel="stylesheet" href="../css/bootstrap.min5.css">
+    <link rel="stylesheet" href="../css/style.css" media="screen">
+    <link rel="stylesheet" type="text/css" href="../css/loasder.css">
+</head>
+
+<body class="bg-color">
+     <header class="p-3 mb-3 border-bottom">
+        <div class="container">
+            <div class="d-flex flex-wrap align-items-center justify-content-center justify-content-lg-start">
+                <a href="https://getbootstrap.com/" class="d-flex align-items-center mb-2 mb-lg-0 text-dark text-decoration-none">
+                    <a class="navbar-brand" href="http://www.nsmu.ru" target="_blank">
+                        <img src="../img/header_logo.png" width="90" height="90" class="d-inline-block align-top" alt="" loading="lazy">
+                    </a>
+                    <!-- <svg class="bi me-2" width="40" height="32" role="img" aria-label="Bootstrap">
+                            <use xlink:href="#bootstrap"></use>
+                        </svg> -->
+                </a>
+                <ul class="nav col-12 col-lg-auto me-lg-auto mb-2 justify-content-center mb-md-0">
+
+                    <li><a href="../index.html" class="btn btn-outline-primary m-1 nav-link px-2 link-dark btn-sm" role="button">Пройти тестирование заново</a></li>
+<!--
+                    <li><a href="#" class="btn btn-outline-primary m-1 saveButton nav-link px-2 link-dark btn-sm" role="button">
+                            <h4>Завершить тестирование</h4>
+                        </a></li>
+-->
+                </ul>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <div class="container">
+            <div class="row mt-3">
+                <div id="loader-wrapper">
+                    <div id="loader"></div>
+                    <div class="loader-section section-left"></div>
+                    <div class="loader-section section-right"></div>
+                </div>
+            </div>
+            <div class="row">
+                <h1>Ваши результаты успешно обработаны.</h1>
+            </div>
+            <div class="row">
+                <h3 class="mt-5">Результаты тестирования:</h3>
+                <div class="showresults"></div>
+            </div>
+        </div>
+    </main>
+    <footer>
+    </footer>
+    <script type="text/javascript" src="../js/jquery.js"></script>
+    <script type="text/javascript" src="../js/bootstrap.min5.js"></script>
+    <script type="text/javascript" src="../js/FileSaver.js"></script>
+     <script type="text/javascript" src="../Quizz/results/saveresulttofile.js"></script>
+
+     <script type="text/javascript">
+        $(document).ready(function() {
+
+            setTimeout(function() {
+                $('body').addClass('loaded');
+                $('h1').css('color', '#222222');
+            }, 1500);
+
+        });
+
+    </script>
+</body>
+
+</html>

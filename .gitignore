@@ -1,0 +1,38 @@
+# Dependencies
+quizz-stomat-app\node_modules
+quizz-stomat-app\.pnp
+quizz-stomat-app\.pnp.js
+
+# Testing
+quizz-stomat-app\coverage
+
+# Production
+quizz-stomat-app\build
+
+# Misc
+quizz-stomat-app\.DS_Store
+quizz-stomat-app\.env.local
+quizz-stomat-app\.env.development.local
+quizz-stomat-app\.env.test.local
+quizz-stomat-app\.env.production.local
+quizz-stomat-app\.env
+
+# Debug logs
+quizz-stomat-app\npm-debug.log*
+quizz-stomat-app\yarn-debug.log*
+quizz-stomat-app\yarn-error.log*
+
+# IDE specific files
+quizz-stomat-app\.idea
+quizz-stomat-app\.vscode
+quizz-stomat-app\*.swp
+quizz-stomat-app\*.swo
+
+# Optional npm cache directory
+quizz-stomat-app\.npm
+
+# Optional eslint cache
+quizz-stomat-app\.eslintcache
+
+# Optional REPL history
+quizz-stomat-app\.node_repl_history

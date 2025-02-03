@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const sqlite3 = require('sqlite3').verbose();
+const Database = require('better-sqlite3');
 const fs = require('fs');
 const path = require('path');
 const ExcelJS = require('exceljs');
@@ -14,73 +14,113 @@ app.use(express.json());
 // Read quiz data from JSON file
 const quizData = JSON.parse(fs.readFileSync(path.join(__dirname, 'quiz-data.json'), 'utf8'));
 
-// Create SQLite database connection
-const db = new sqlite3.Database('quiz.db', (err) => {
-  if (err) {
-    console.error('Error connecting to database:', err);
-  } else {
-    console.log('Connected to SQLite database');
-  }
-});
+// Initialize database
+const dbPath = path.join(__dirname, 'data', 'quiz.db');
+const dbDir = path.dirname(dbPath);
+
+// Create data directory if it doesn't exist
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+}
+
+const db = new Database(dbPath);
+
+// Create tables if they don't exist
+db.exec(`
+  CREATE TABLE IF NOT EXISTS quiz_results (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL,
+    total_score INTEGER NOT NULL,
+    test1_score INTEGER,
+    test2_score INTEGER,
+    test3_score INTEGER,
+    test4_score INTEGER,
+    test1_result TEXT,
+    test2_result TEXT,
+    test3_result TEXT,
+    test4_result TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS section_scores (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    result_id INTEGER NOT NULL,
+    section_title TEXT NOT NULL,
+    score INTEGER NOT NULL,
+    max_score INTEGER NOT NULL,
+    section_result TEXT NOT NULL,
+    FOREIGN KEY (result_id) REFERENCES quiz_results(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS detailed_answers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    result_id INTEGER NOT NULL,
+    section_title TEXT NOT NULL,
+    question_id INTEGER NOT NULL,
+    question_text TEXT NOT NULL,
+    answer_text TEXT NOT NULL,
+    answer_index INTEGER NOT NULL,
+    possible_score INTEGER NOT NULL,
+    score INTEGER NOT NULL,
+    FOREIGN KEY (result_id) REFERENCES quiz_results(id)
+  );
+`);
 
 // Initialize database tables - only called from admin panel
 async function initializeDatabase() {
-  return new Promise((resolve, reject) => {
-    db.serialize(() => {
-      try {
-        // Drop existing tables
-        db.run(`DROP TABLE IF EXISTS detailed_answers`);
-        db.run(`DROP TABLE IF EXISTS section_scores`);
-        db.run(`DROP TABLE IF EXISTS quiz_results`);
+  try {
+    // Drop existing tables
+    db.exec('DROP TABLE IF EXISTS detailed_answers');
+    db.exec('DROP TABLE IF EXISTS section_scores');
+    db.exec('DROP TABLE IF EXISTS quiz_results');
 
-        // Create tables with updated schema
-        db.run(`CREATE TABLE IF NOT EXISTS quiz_results (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          first_name TEXT NOT NULL,
-          last_name TEXT NOT NULL,
-          total_score INTEGER NOT NULL,
-          test1_score INTEGER,
-          test2_score INTEGER,
-          test3_score INTEGER,
-          test4_score INTEGER,
-          test1_result TEXT,
-          test2_result TEXT,
-          test3_result TEXT,
-          test4_result TEXT,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )`);
+    // Create tables with updated schema
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS quiz_results (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        first_name TEXT NOT NULL,
+        last_name TEXT NOT NULL,
+        total_score INTEGER NOT NULL,
+        test1_score INTEGER,
+        test2_score INTEGER,
+        test3_score INTEGER,
+        test4_score INTEGER,
+        test1_result TEXT,
+        test2_result TEXT,
+        test3_result TEXT,
+        test4_result TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
 
-        db.run(`CREATE TABLE IF NOT EXISTS section_scores (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          result_id INTEGER NOT NULL,
-          section_title TEXT NOT NULL,
-          score INTEGER NOT NULL,
-          max_score INTEGER NOT NULL,
-          section_result TEXT NOT NULL,
-          FOREIGN KEY (result_id) REFERENCES quiz_results(id)
-        )`);
+      CREATE TABLE IF NOT EXISTS section_scores (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        result_id INTEGER NOT NULL,
+        section_title TEXT NOT NULL,
+        score INTEGER NOT NULL,
+        max_score INTEGER NOT NULL,
+        section_result TEXT NOT NULL,
+        FOREIGN KEY (result_id) REFERENCES quiz_results(id)
+      );
 
-        db.run(`CREATE TABLE IF NOT EXISTS detailed_answers (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          result_id INTEGER NOT NULL,
-          section_title TEXT NOT NULL,
-          question_id INTEGER NOT NULL,
-          question_text TEXT NOT NULL,
-          answer_text TEXT NOT NULL,
-          answer_index INTEGER NOT NULL,
-          possible_score INTEGER NOT NULL,
-          score INTEGER NOT NULL,
-          FOREIGN KEY (result_id) REFERENCES quiz_results(id)
-        )`);
+      CREATE TABLE IF NOT EXISTS detailed_answers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        result_id INTEGER NOT NULL,
+        section_title TEXT NOT NULL,
+        question_id INTEGER NOT NULL,
+        question_text TEXT NOT NULL,
+        answer_text TEXT NOT NULL,
+        answer_index INTEGER NOT NULL,
+        possible_score INTEGER NOT NULL,
+        score INTEGER NOT NULL,
+        FOREIGN KEY (result_id) REFERENCES quiz_results(id)
+      );
+    `);
 
-        console.log('Database tables recreated successfully');
-        resolve();
-      } catch (error) {
-        console.error('Error initializing database:', error);
-        reject(error);
-      }
-    });
-  });
+    console.log('Database tables recreated successfully');
+  } catch (error) {
+    console.error('Error initializing database:', error);
+  }
 }
 
 function calculateTestResult(testNumber, score) {
@@ -177,15 +217,6 @@ async function exportToExcel(results) {
   return filename;
 }
 
-function runQuery(query, params = []) {
-  return new Promise((resolve, reject) => {
-    db.run(query, params, function(err) {
-      if (err) reject(err);
-      else resolve(this);
-    });
-  });
-}
-
 // Secret key for JWT
 const JWT_SECRET = 'your-secret-key-here';
 const ADMIN_PASSWORD = 'admin123'; // Change this to a secure password
@@ -233,64 +264,23 @@ app.post('/api/results', async (req, res) => {
     const test4Result = calculateTestResult(4, test4Score);
 
     // Insert main result
-    const result = await new Promise((resolve, reject) => {
-      db.run(
-        `INSERT INTO quiz_results (
-          first_name, last_name, total_score,
-          test1_score, test2_score, test3_score, test4_score,
-          test1_result, test2_result, test3_result, test4_result
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          firstName, lastName, totalScore,
-          test1Score, test2Score, test3Score, test4Score,
-          test1Result, test2Result, test3Result, test4Result
-        ],
-        function(err) {
-          if (err) reject(err);
-          else resolve({ lastID: this.lastID });
-        }
-      );
-    });
+    const insertResult = db.prepare('INSERT INTO quiz_results (first_name, last_name, total_score, test1_score, test2_score, test3_score, test4_score, test1_result, test2_result, test3_result, test4_result) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    const result = insertResult.run(firstName, lastName, totalScore, test1Score, test2Score, test3Score, test4Score, test1Result, test2Result, test3Result, test4Result);
 
-    const resultId = result.lastID;
+    const resultId = result.lastInsertRowid;
 
     // Insert section scores with results
+    const insertSectionScore = db.prepare('INSERT INTO section_scores (result_id, section_title, score, max_score, section_result) VALUES (?, ?, ?, ?, ?)');
     for (let i = 0; i < sectionScores.length; i++) {
       const section = sectionScores[i];
       const sectionResult = calculateTestResult(i + 1, section.score);
-      await new Promise((resolve, reject) => {
-        db.run(
-          'INSERT INTO section_scores (result_id, section_title, score, max_score, section_result) VALUES (?, ?, ?, ?, ?)',
-          [resultId, section.section_title, section.score, section.max_score, sectionResult],
-          function(err) {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      insertSectionScore.run(resultId, section.section_title, section.score, section.max_score, sectionResult);
     }
 
     // Insert detailed answers
+    const insertDetailedAnswer = db.prepare('INSERT INTO detailed_answers (result_id, section_title, question_id, question_text, answer_text, answer_index, possible_score, score) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
     for (const answer of detailedAnswers) {
-      await new Promise((resolve, reject) => {
-        db.run(
-          'INSERT INTO detailed_answers (result_id, section_title, question_id, question_text, answer_text, answer_index, possible_score, score) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-          [
-            resultId,
-            answer.section_title,
-            answer.question_id,
-            answer.question_text,
-            answer.answer_text,
-            answer.answer_index,
-            answer.possible_score,
-            answer.score
-          ],
-          function(err) {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      insertDetailedAnswer.run(resultId, answer.section_title, answer.question_id, answer.question_text, answer.answer_text, answer.answer_index, answer.possible_score, answer.score);
     }
 
     res.json({ 
@@ -325,37 +315,12 @@ app.post('/api/results/excel', authenticateToken, async (req, res) => {
     query += ` ORDER BY created_at DESC`;
 
     // Get all results within date range
-    const results = await new Promise((resolve, reject) => {
-      db.all(query, params, (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows || []);
-      });
-    });
+    const results = db.prepare(query).all(...params);
 
     // Get section scores and detailed answers for each result
     const detailedResults = await Promise.all(results.map(async (result) => {
-      const [sectionScores, answers] = await Promise.all([
-        new Promise((resolve, reject) => {
-          db.all(
-            'SELECT * FROM section_scores WHERE result_id = ? ORDER BY section_title',
-            [result.id],
-            (err, rows) => {
-              if (err) reject(err);
-              else resolve(rows || []);
-            }
-          );
-        }),
-        new Promise((resolve, reject) => {
-          db.all(
-            'SELECT * FROM detailed_answers WHERE result_id = ? ORDER BY section_title, question_id',
-            [result.id],
-            (err, rows) => {
-              if (err) reject(err);
-              else resolve(rows || []);
-            }
-          );
-        })
-      ]);
+      const sectionScores = db.prepare('SELECT * FROM section_scores WHERE result_id = ? ORDER BY section_title').all(result.id);
+      const answers = db.prepare('SELECT * FROM detailed_answers WHERE result_id = ? ORDER BY section_title, question_id').all(result.id);
       
       return {
         ...result,
@@ -453,27 +418,19 @@ app.post('/api/admin/login', (req, res) => {
 
 app.get('/api/results', authenticateToken, async (req, res) => {
   try {
-    db.all('SELECT * FROM quiz_results ORDER BY created_at DESC', [], async (err, results) => {
-      if (err) throw err;
+    const results = db.prepare('SELECT * FROM quiz_results ORDER BY created_at DESC').all();
+    const fullResults = await Promise.all(results.map(async (result) => {
+      const sectionScores = db.prepare('SELECT * FROM section_scores WHERE result_id = ?').all(result.id);
+      const detailedAnswers = db.prepare('SELECT * FROM detailed_answers WHERE result_id = ?').all(result.id);
+      
+      return {
+        ...result,
+        sectionScores,
+        detailedAnswers
+      };
+    }));
 
-      const fullResults = await Promise.all(results.map(async (result) => {
-        return new Promise((resolve, reject) => {
-          db.all('SELECT * FROM section_scores WHERE result_id = ?', [result.id], (err, sectionScores) => {
-            if (err) reject(err);
-            db.all('SELECT * FROM detailed_answers WHERE result_id = ?', [result.id], (err, detailedAnswers) => {
-              if (err) reject(err);
-              resolve({
-                ...result,
-                sectionScores,
-                detailedAnswers
-              });
-            });
-          });
-        });
-      }));
-
-      res.json(fullResults);
-    });
+    res.json(fullResults);
   } catch (error) {
     console.error('Error getting results:', error);
     res.status(500).json({ error: 'Failed to get results' });
@@ -482,13 +439,7 @@ app.get('/api/results', authenticateToken, async (req, res) => {
 
 app.get('/api/results/excel', authenticateToken, async (req, res) => {
   try {
-    const results = await new Promise((resolve, reject) => {
-      db.all('SELECT * FROM quiz_results ORDER BY created_at DESC', [], (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows);
-      });
-    });
-
+    const results = db.prepare('SELECT * FROM quiz_results ORDER BY created_at DESC').all();
     const filename = await exportToExcel(results);
     res.download(filename);
   } catch (error) {
@@ -501,15 +452,15 @@ app.delete('/api/results/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
   
   try {
-    await runQuery('BEGIN TRANSACTION');
-    await runQuery('DELETE FROM section_scores WHERE result_id = ?', [id]);
-    await runQuery('DELETE FROM detailed_answers WHERE result_id = ?', [id]);
-    await runQuery('DELETE FROM quiz_results WHERE id = ?', [id]);
-    await runQuery('COMMIT');
+    db.exec('BEGIN TRANSACTION');
+    db.prepare('DELETE FROM section_scores WHERE result_id = ?').run(id);
+    db.prepare('DELETE FROM detailed_answers WHERE result_id = ?').run(id);
+    db.prepare('DELETE FROM quiz_results WHERE id = ?').run(id);
+    db.exec('COMMIT');
     
     res.json({ success: true });
   } catch (error) {
-    await runQuery('ROLLBACK');
+    db.exec('ROLLBACK');
     console.error('Error deleting result:', error);
     res.status(500).json({ success: false, error: error.message });
   }
@@ -517,15 +468,15 @@ app.delete('/api/results/:id', authenticateToken, async (req, res) => {
 
 app.delete('/api/results', authenticateToken, async (req, res) => {
   try {
-    await runQuery('BEGIN TRANSACTION');
-    await runQuery('DELETE FROM section_scores');
-    await runQuery('DELETE FROM detailed_answers');
-    await runQuery('DELETE FROM quiz_results');
-    await runQuery('COMMIT');
+    db.exec('BEGIN TRANSACTION');
+    db.exec('DELETE FROM section_scores');
+    db.exec('DELETE FROM detailed_answers');
+    db.exec('DELETE FROM quiz_results');
+    db.exec('COMMIT');
     
     res.json({ success: true });
   } catch (error) {
-    await runQuery('ROLLBACK');
+    db.exec('ROLLBACK');
     console.error('Error deleting all results:', error);
     res.status(500).json({ success: false, error: error.message });
   }
@@ -542,7 +493,45 @@ app.post('/api/admin/init-db', authenticateToken, async (req, res) => {
   }
 });
 
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Error:', err.stack);
+  res.status(err.status || 500).json({
+    error: {
+      message: err.message || 'Internal Server Error',
+      status: err.status || 500
+    }
+  });
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+  // Give time for logs to be written
+  setTimeout(() => {
+    process.exit(1);
+  }, 1000);
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  // Give time for logs to be written
+  setTimeout(() => {
+    process.exit(1);
+  }, 1000);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.info('SIGTERM signal received. Closing HTTP server...');
+  server.close(() => {
+    console.info('HTTP server closed');
+    process.exit(0);
+  });
+});
+
 const PORT = process.env.PORT || 3002;
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Server is running on port ${PORT}`);
 });

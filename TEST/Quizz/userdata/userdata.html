@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Представьтесь, пожалуйста</title>
+    <link rel="stylesheet" href="../../css/normalize.css">
+    <link rel="stylesheet" href="../../css/bootstrap.min5.css">
+    <link rel="stylesheet" href="../../css/jquery-ui.css">
+    <link rel="stylesheet" href="../../css/style.css">
+</head>
+
+<body>
+    <div class="container mt-5">
+        <div class="row">
+            <h3>Прежде, чем мы продолжим, введите вашу фамилию:</h3>
+        </div>
+        <div class="row g-2">
+            <div class="col-3 col-md-3 mt-3">
+                <figure class="figure">
+                    <img src="../../img/header_logo.png" class="figure-img img-fluid rounded" alt="no_image">
+                </figure>
+            </div>
+            <div class="col-9 col-md-9">
+                <form id="forms" class="needs-validation mt-5" novalidate>
+                    <div class="row g-3">
+                        <div class="col-4 col-md-4">
+                            <label for="lastname">Ваша фамилия:</label>
+                            <input type="text" class="form-control" id="lastname" required>
+                            <div class="invalid-feedback">
+                                Это обязательное поле! <br>Укажите вашу фамилию/
+                            </div>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary mt-4" type="submit">Приступить к тестированию</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <script type="text/javascript" src="../../js/jquery.js"></script>
+    <script type="text/javascript" src="../../js/jquery-ui.js"></script>
+    <script type="text/javascript" src="../../js/bootstrap.min5.js"></script>
+    <script>
+        (function() {
+            'use strict'
+	var gender = "F";
+            $("#M").on('click', function() {
+                gender = "M"
+            })
+
+            
+            window.addEventListener('load', function() {
+
+                // Получаем возрас пациента, учитывать месяц рождения или нет?
+                let object = document.getElementById("dateps");
+
+                let currentTime = new Date();
+                let yearNow = currentTime.getFullYear();
+
+               
+                    
+               // document.getElementById("childbirth").innerHTML = ''
+
+
+                // Fetch all the forms we want to apply custom Bootstrap validation styles to
+                var forms = document.getElementsByClassName('needs-validation');
+                // Loop over them and prevent submission
+                var validation = Array.prototype.filter.call(forms, function(form) {
+                    form.addEventListener('submit', function(event) {
+                        if (form.checkValidity() === false) {
+                            event.preventDefault();
+                            event.stopPropagation();
+                        } else {
+                            event.preventDefault();
+
+                            let name = $('#lastname').val()
+
+                            localStorage.setItem('name', name)
+
+                            document.location.href = '../interestQuiz.html';
+                        }
+                        form.classList.add('was-validated');
+                    }, false);
+                });
+            }, false);
+        })();
+
+    </script>
+</body>
+
+</html>

@@ -32,7 +32,7 @@ const AppContent: React.FC = () => {
     <div className="app-container">
       <nav className="navbar navbar-expand-lg navbar-dark bg-dark">
         <div className="container-fluid">
-          <span className="navbar-brand">Тест по гигиене полости рта, оказание стоматологической помощи и образ жизни людей, проживающих в психоневрологических интернатах</span>
+          <span className="navbar-brand">Тест по гигиене полости рта, оказанию стоматологической помощи и образу жизни людей, проживающих в психоневрологических интернатах</span>
           <div className="d-flex">
             <Button
               variant="outline-light"
