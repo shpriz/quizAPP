@@ -1,13 +1,29 @@
 .thank-you-container {
   padding: 2rem;
-  max-width: 800px;
+  max-width: 600px;
   margin: 0 auto;
+  display: flex;
+  align-items: center;
+  min-height: 80vh;
 }
 
 .thank-you-card {
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
   border-radius: 10px;
   background-color: #ffffff;
+  width: 100%;
+  text-align: center;
+  padding: 2rem;
+}
+
+.thank-you-card h2 {
+  color: #2c3e50;
+  margin-bottom: 1.5rem;
+}
+
+.thank-you-card p {
+  color: #666;
+  font-size: 1.1rem;
 }
 
 .results-section {

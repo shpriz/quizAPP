@@ -4,6 +4,7 @@ const Database = require('better-sqlite3');
 const fs = require('fs');
 const path = require('path');
 const jwt = require('jsonwebtoken');
+const ExcelJS = require('exceljs');
 
 const app = express();
 app.use(cors({
@@ -11,7 +12,9 @@ app.use(cors({
     'http://stomtest.nsmu.ru:5173',
     'http://stomtest.nsmu.ru',
     'http://localhost:5173',
-    'http://localhost:3000'
+    'http://localhost:3000',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:3000'
   ],
   credentials: true
 }));
@@ -341,34 +344,93 @@ app.get('/api/results', authenticateToken, async (req, res) => {
 
 app.get('/api/results/excel', authenticateToken, async (req, res) => {
   try {
-    const results = db.prepare('SELECT * FROM quiz_results ORDER BY created_at DESC').all();
-    // Removed ExcelJS usage
-    res.json({ success: true });
+    const { from, to, name } = req.query;
+    let query = 'SELECT * FROM quiz_results';
+    const params = [];
+
+    if (from && to) {
+      query += ' WHERE completion_date BETWEEN ? AND ?';
+      params.push(from, to);
+    }
+
+    if (name) {
+      query += params.length ? ' AND' : ' WHERE';
+      query += ' (first_name LIKE ? OR last_name LIKE ?)';
+      params.push(`%${name}%`, `%${name}%`);
+    }
+
+    query += ' ORDER BY completion_date DESC';
+
+    const results = db.prepare(query).all(...params);
+
+    // Создаем Excel файл
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Результаты тестирования');
+
+    // Заголовки
+    worksheet.columns = [
+      { header: 'Имя', key: 'first_name', width: 15 },
+      { header: 'Фамилия', key: 'last_name', width: 15 },
+      { header: 'Дата', key: 'completion_date', width: 15 },
+      { header: 'Общий балл', key: 'total_score', width: 15 },
+      { header: 'Тест 1 балл', key: 'test1_score', width: 15 },
+      { header: 'Тест 2 балл', key: 'test2_score', width: 15 },
+      { header: 'Тест 3 балл', key: 'test3_score', width: 15 },
+      { header: 'Тест 4 балл', key: 'test4_score', width: 15 },
+      { header: 'Тест 1 результат', key: 'test1_result', width: 30 },
+      { header: 'Тест 2 результат', key: 'test2_result', width: 30 },
+      { header: 'Тест 3 результат', key: 'test3_result', width: 30 },
+      { header: 'Тест 4 результат', key: 'test4_result', width: 30 }
+    ];
+
+    // Добавляем данные
+    results.forEach(result => {
+      worksheet.addRow({
+        ...result,
+        completion_date: new Date(result.completion_date).toLocaleDateString()
+      });
+    });
+
+    // Стилизация
+    worksheet.getRow(1).font = { bold: true };
+    worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+    // Отправляем файл
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=results.xlsx');
+    await workbook.xlsx.write(res);
   } catch (error) {
     console.error('Error exporting to Excel:', error);
     res.status(500).json({ error: 'Failed to export results' });
   }
 });
 
-app.delete('/api/results/:id', authenticateToken, async (req, res) => {
-  const { id } = req.params;
-  
+app.delete('/api/results/:id', authenticateToken, (req, res) => {
   try {
-    db.exec('BEGIN TRANSACTION');
-    db.prepare('DELETE FROM section_scores WHERE result_id = ?').run(id);
-    db.prepare('DELETE FROM detailed_answers WHERE result_id = ?').run(id);
-    db.prepare('DELETE FROM quiz_results WHERE id = ?').run(id);
-    db.exec('COMMIT');
+    const { id } = req.params;
     
-    res.json({ success: true });
+    // Начинаем транзакцию
+    const transaction = db.transaction(() => {
+      // Удаляем связанные записи из section_scores
+      db.prepare('DELETE FROM section_scores WHERE result_id = ?').run(id);
+      
+      // Удаляем основную запись
+      const result = db.prepare('DELETE FROM quiz_results WHERE id = ?').run(id);
+      
+      if (result.changes === 0) {
+        throw new Error('Result not found');
+      }
+    });
+
+    transaction();
+    res.json({ message: 'Result deleted successfully' });
   } catch (error) {
-    db.exec('ROLLBACK');
     console.error('Error deleting result:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ error: 'Failed to delete result' });
   }
 });
 
-app.delete('/api/results', authenticateToken, async (req, res) => {
+app.delete('/api/results', authenticateToken, (req, res) => {
   try {
     db.exec('BEGIN TRANSACTION');
     db.exec('DELETE FROM section_scores');
@@ -392,6 +454,29 @@ app.post('/api/admin/init-db', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error initializing database:', error);
     res.status(500).json({ error: 'Failed to initialize database' });
+  }
+});
+
+// Сброс базы данных (опасная зона)
+app.post('/api/admin/reset-database', authenticateToken, (req, res) => {
+  try {
+    // Начинаем транзакцию
+    const transaction = db.transaction(() => {
+      // Удаляем все записи из section_scores
+      db.prepare('DELETE FROM section_scores').run();
+      
+      // Удаляем все записи из quiz_results
+      db.prepare('DELETE FROM quiz_results').run();
+      
+      // Сбрасываем автоинкремент
+      db.prepare('DELETE FROM sqlite_sequence WHERE name IN (?, ?)').run('quiz_results', 'section_scores');
+    });
+
+    transaction();
+    res.json({ message: 'Database reset successfully' });
+  } catch (error) {
+    console.error('Error resetting database:', error);
+    res.status(500).json({ error: 'Failed to reset database' });
   }
 });
 

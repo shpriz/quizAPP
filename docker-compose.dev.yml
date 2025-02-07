@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    ports:
+      - "3002:3002"
+    volumes:
+      - ./server:/usr/src/app
+      - backend_node_modules:/usr/src/app/node_modules
+    environment:
+      - NODE_ENV=development
+      - PORT=3002
+    command: npm run dev
+
+volumes:
+  backend_node_modules:

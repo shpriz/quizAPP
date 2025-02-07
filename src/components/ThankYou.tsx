@@ -1,16 +1,23 @@
-import React from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { Container, Card, Button } from 'react-bootstrap';
+import React, { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Container, Card } from 'react-bootstrap';
 import './ThankYou.css';
 
 interface Props {
   onAdmin: () => void;
 }
 
-const ThankYou: React.FC<Props> = ({ onAdmin }) => {
+const ThankYou: React.FC<Props> = () => {
   const navigate = useNavigate();
-  const location = useLocation();
-  const state = location.state as { results: string[], scores: number[] } | undefined;
+
+  useEffect(() => {
+    // Редирект на главную через 3 секунды
+    const timer = setTimeout(() => {
+      navigate('/');
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, [navigate]);
 
   return (
     <Container className="thank-you-container">
@@ -18,47 +25,7 @@ const ThankYou: React.FC<Props> = ({ onAdmin }) => {
         <Card.Body>
           <div className="text-center">
             <h2>Спасибо за прохождение теста!</h2>
-            
-            {state?.results && (
-              <div className="results-section">
-                <h3>Результаты тестирования:</h3>
-                {state.results.map((result, index) => (
-                  <div key={index} className="test-result">
-                    <h4>Тест {index + 1}</h4>
-                    <p>Количество баллов: {state.scores[index]}</p>
-                    <p>{result}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="buttons-container">
-              <Button 
-                variant="primary" 
-                onClick={() => navigate('/')}
-                className="thank-you-button"
-              >
-                На главную
-              </Button>
-              <Button 
-                variant="secondary" 
-                onClick={onAdmin}
-                className="thank-you-button"
-              >
-                Просмотр результатов
-              </Button>
-            </div>
-
-            <p className="download-note">
-              Результаты теста были сохранены в Excel файл. Если загрузка не началась автоматически,
-              <Button 
-                variant="link" 
-                onClick={() => window.location.href = 'http://localhost:3002/api/results/excel'}
-                className="download-link"
-              >
-                нажмите здесь
-              </Button>
-            </p>
+            <p>Через несколько секунд вы будете перенаправлены на главную страницу...</p>
           </div>
         </Card.Body>
       </Card>

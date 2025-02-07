@@ -1,4 +1,4 @@
-FROM node:22
+FROM node:18
 
 WORKDIR /usr/src/app
 
@@ -12,17 +12,22 @@ RUN apt-get update && \
     build-essential
 
 # Set environment variables for better-sqlite3 build
-ENV CFLAGS="-std=c++20"
-ENV CXXFLAGS="-std=c++20"
+ENV CFLAGS="-std=c++17"
+ENV CXXFLAGS="-std=c++17"
+
+# Install nodemon globally
+RUN npm install -g nodemon
 
 COPY package*.json ./
 
 # Install dependencies
 RUN npm install
 
-# Copy source code
+# Copy app source
 COPY . .
 
+# Expose port
 EXPOSE 3002
 
-CMD ["npm", "start"]
+# Start app
+CMD ["npm", "run", "dev"]

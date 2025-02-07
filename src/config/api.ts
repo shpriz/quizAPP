@@ -1,10 +1,10 @@
 const isDevelopment = import.meta.env.DEV;
 
-// В development используем localhost
+// В development используем localhost:3002
 // В production используем текущий домен
 const API_BASE_URL = isDevelopment 
     ? 'http://localhost:3002' 
-    : window.location.origin;
+    : `${window.location.protocol}//${window.location.host}`;
 
 export const API_ENDPOINTS = {
     questions: '/api/questions',
@@ -14,10 +14,7 @@ export const API_ENDPOINTS = {
     exportExcel: '/api/results/excel'
 };
 
-// В development убираем /api из пути, так как обращаемся напрямую к бэкенду
+// В режиме разработки и продакшн используем одинаковые пути с /api
 export const getApiUrl = (endpoint: string) => {
-    if (isDevelopment) {
-        return `${API_BASE_URL}${endpoint.replace('/api', '')}`;
-    }
     return `${API_BASE_URL}${endpoint}`;
 };
