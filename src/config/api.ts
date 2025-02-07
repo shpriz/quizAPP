@@ -1,8 +1,10 @@
 const isDevelopment = import.meta.env.DEV;
 
-// В development используем прямой URL до бэкенда
-// В production используем относительные пути, так как nginx проксирует /api
-const API_BASE_URL = isDevelopment ? 'http://localhost:3002' : '';
+// В development используем localhost
+// В production используем текущий домен
+const API_BASE_URL = isDevelopment 
+    ? 'http://localhost:3002' 
+    : window.location.origin;
 
 export const API_ENDPOINTS = {
     questions: '/api/questions',
@@ -17,5 +19,5 @@ export const getApiUrl = (endpoint: string) => {
     if (isDevelopment) {
         return `${API_BASE_URL}${endpoint.replace('/api', '')}`;
     }
-    return endpoint;
+    return `${API_BASE_URL}${endpoint}`;
 };
