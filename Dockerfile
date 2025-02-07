@@ -1,15 +1,16 @@
-FROM node:23
+FROM node:20-alpine
 
 WORKDIR /usr/src/app
 
 COPY package*.json ./
 
-# Install dependencies
+# Install all dependencies including dev dependencies
 RUN npm install
 
+# Copy source code
 COPY . .
 
 EXPOSE 5173
 
-# Use vite with host flag
-CMD ["npm", "run", "dev", "--", "--host"]
+# Run in development mode with host flag
+CMD ["npm", "run", "dev", "--", "--host", "--port", "5173"]

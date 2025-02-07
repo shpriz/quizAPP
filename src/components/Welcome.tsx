@@ -7,7 +7,7 @@ interface WelcomeProps {
   onAdmin: () => void;
 }
 
-const Welcome: React.FC<WelcomeProps> = ({ onStart, onAdmin }) => {
+const Welcome: React.FC<WelcomeProps> = ({ onStart }) => {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [showForm, setShowForm] = useState(false);
