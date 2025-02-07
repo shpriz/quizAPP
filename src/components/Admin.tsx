@@ -12,6 +12,7 @@ interface Result {
   first_name: string;
   last_name: string;
   completion_date: string;
+  created_at: string;
   total_score: number;
   test1_score: number;
   test2_score: number;
@@ -35,26 +36,30 @@ const Admin: React.FC<AdminProps> = ({ onBackToWelcome }) => {
   const fetchResults = async () => {
     try {
       const token = localStorage.getItem('adminToken');
-      const response = await fetch(getApiUrl(API_ENDPOINTS.results), {
-        headers: {
-          'Authorization': `Bearer ${token}`
+      const queryParams = new URLSearchParams();
+      
+      if (dateFilter.from) queryParams.append('from', dateFilter.from);
+      if (dateFilter.to) queryParams.append('to', dateFilter.to);
+      if (nameFilter) queryParams.append('name', nameFilter);
+
+      const response = await fetch(
+        `${getApiUrl('/api/results')}?${queryParams.toString()}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
         }
-      });
+      );
 
       if (!response.ok) {
-        if (response.status === 401 || response.status === 403) {
-          setIsAuthenticated(false);
-          localStorage.removeItem('adminToken');
-          throw new Error('Необходима авторизация');
-        }
-        throw new Error('Не удалось загрузить результаты');
+        throw new Error('Failed to fetch results');
       }
 
       const data = await response.json();
       setResults(data);
-      setError(null);
+      setError('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Произошла ошибка');
+      setError(err instanceof Error ? err.message : 'Произошла ошибка при загрузке результатов');
     }
   };
 
@@ -71,39 +76,70 @@ const Admin: React.FC<AdminProps> = ({ onBackToWelcome }) => {
 
     try {
       const token = localStorage.getItem('adminToken');
-      const response = await fetch(getApiUrl(`${API_ENDPOINTS.results}/${id}`), {
+      if (!token) {
+        setError('Необходима авторизация');
+        return;
+      }
+
+      console.log('Sending delete request for id:', id);
+      const response = await fetch(`${getApiUrl('/api/results')}/${id}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
       });
 
+      console.log('Delete response status:', response.status);
+      const data = await response.json();
+      console.log('Delete response data:', data);
+
       if (!response.ok) {
-        throw new Error('Не удалось удалить результат');
+        if (response.status === 401 || response.status === 403) {
+          setIsAuthenticated(false);
+          localStorage.removeItem('adminToken');
+          throw new Error('Необходима авторизация');
+        }
+        throw new Error(data.error || 'Не удалось удалить результат');
       }
 
-      await fetchResults();
+      await fetchResults(); // Обновляем список после удаления
+      setError('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Произошла ошибка при удалении');
+      console.error('Error in handleDeleteResult:', err);
+      setError(err instanceof Error ? err.message : 'Произошла ошибка при удалении результата');
     }
   };
 
   const handleExport = async (format: 'csv' | 'excel') => {
     try {
       const token = localStorage.getItem('adminToken');
+      if (!token) {
+        setError('Необходима авторизация');
+        return;
+      }
+
       const queryParams = new URLSearchParams();
-      
       if (dateFilter.from) queryParams.append('from', dateFilter.from);
       if (dateFilter.to) queryParams.append('to', dateFilter.to);
       if (nameFilter) queryParams.append('name', nameFilter);
+      queryParams.append('format', format);
 
-      const response = await fetch(getApiUrl(`${API_ENDPOINTS.results}/${format}?${queryParams}`), {
-        headers: {
-          'Authorization': `Bearer ${token}`
+      const response = await fetch(
+        `${getApiUrl(API_ENDPOINTS.results)}?${queryParams.toString()}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
         }
-      });
+      );
 
       if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          setIsAuthenticated(false);
+          localStorage.removeItem('adminToken');
+          throw new Error('Необходима авторизация');
+        }
         throw new Error('Не удалось экспортировать результаты');
       }
 
@@ -114,39 +150,80 @@ const Admin: React.FC<AdminProps> = ({ onBackToWelcome }) => {
       a.download = `test_results.${format}`;
       document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      a.remove(); // Удаляем элемент сразу после клика
+      setTimeout(() => window.URL.revokeObjectURL(url), 100); // Освобождаем URL с небольшой задержкой
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Произошла ошибка при экспорте');
     }
   };
 
   const handleResetDatabase = async () => {
-    if (!window.confirm('ВНИМАНИЕ! Это действие удалит ВСЕ результаты тестирования. Вы уверены?')) {
-      return;
-    }
-    const confirmText = window.prompt('Для подтверждения введите "УДАЛИТЬ"');
-    if (confirmText !== 'УДАЛИТЬ') {
+    if (!window.confirm('Вы уверены, что хотите сбросить базу данных? Это действие нельзя отменить!')) {
       return;
     }
 
     try {
       const token = localStorage.getItem('adminToken');
-      const response = await fetch(getApiUrl('/api/admin/reset-database'), {
+      if (!token) {
+        setError('Необходима авторизация');
+        return;
+      }
+
+      const response = await fetch(getApiUrl(API_ENDPOINTS.resetDatabase), {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
       });
 
+      const data = await response.json();
+      console.log('Reset response:', data);
+
       if (!response.ok) {
-        throw new Error('Не удалось сбросить базу данных');
+        throw new Error(data.error || 'Не удалось сбросить базу данных');
       }
 
       await fetchResults();
-      alert('База данных успешно очищена');
+      setError('');
     } catch (err) {
+      console.error('Error in handleResetDatabase:', err);
       setError(err instanceof Error ? err.message : 'Произошла ошибка при сбросе базы данных');
+    }
+  };
+
+  const handleReinitDatabase = async () => {
+    if (!window.confirm('Вы уверены, что хотите реинициализировать базу данных? Это пересоздаст все таблицы с новой схемой. Все данные будут потеряны!')) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('adminToken');
+      if (!token) {
+        setError('Необходима авторизация');
+        return;
+      }
+
+      const response = await fetch(getApiUrl(API_ENDPOINTS.reinitDatabase), {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const data = await response.json();
+      console.log('Reinit response:', data);
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Не удалось реинициализировать базу данных');
+      }
+
+      await fetchResults();
+      setError('');
+    } catch (err) {
+      console.error('Error in handleReinitDatabase:', err);
+      setError(err instanceof Error ? err.message : 'Произошла ошибка при реинициализации базы данных');
     }
   };
 
@@ -288,15 +365,16 @@ const Admin: React.FC<AdminProps> = ({ onBackToWelcome }) => {
               <td>{result.id}</td>
               <td>{result.first_name}</td>
               <td>{result.last_name}</td>
-              <td>{new Date(result.completion_date).toLocaleDateString()}</td>
+              <td>{new Date(result.created_at).toLocaleString('ru-RU')}</td>
               <td>{result.total_score}</td>
               <td>
                 <Button 
                   variant="danger" 
                   size="sm"
                   onClick={() => handleDeleteResult(result.id)}
+                  className="me-2"
                 >
-                  Удалить
+                  <i className="bi bi-trash"></i> Удалить
                 </Button>
               </td>
             </tr>
@@ -307,15 +385,24 @@ const Admin: React.FC<AdminProps> = ({ onBackToWelcome }) => {
       <Card className="mt-4 border-danger">
         <Card.Header className="bg-danger text-white">Опасная зона</Card.Header>
         <Card.Body>
-          <h5>Сброс базы данных</h5>
           <p className="text-danger">
-            Внимание! Это действие необратимо удалит все результаты тестирования из базы данных.
+            <i className="bi bi-exclamation-triangle-fill me-2"></i>
+            Внимание! Эти действия необратимы!
           </p>
           <Button 
-            variant="outline-danger"
+            variant="danger" 
             onClick={handleResetDatabase}
+            className="me-2"
           >
+            <i className="bi bi-trash me-2"></i>
             Сбросить базу данных
+          </Button>
+          <Button 
+            variant="danger" 
+            onClick={handleReinitDatabase}
+          >
+            <i className="bi bi-arrow-clockwise me-2"></i>
+            Реинициализировать БД
           </Button>
         </Card.Body>
       </Card>

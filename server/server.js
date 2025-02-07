@@ -7,18 +7,26 @@ const jwt = require('jsonwebtoken');
 const ExcelJS = require('exceljs');
 
 const app = express();
+
+// CORS configuration
 app.use(cors({
   origin: [
-    'http://stomtest.nsmu.ru:5173',
-    'http://stomtest.nsmu.ru',
-    'http://localhost:5173',
+    'http://stomtest.nsmu.ru:3000',
     'http://localhost:3000',
-    'http://127.0.0.1:5173',
     'http://127.0.0.1:3000'
   ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 }));
+
 app.use(express.json());
+
+// Logging middleware
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} ${req.method} ${req.url}`);
+  next();
+});
 
 // Read quiz data from JSON file
 const quizData = JSON.parse(fs.readFileSync(path.join(__dirname, 'quiz-data.json'), 'utf8'));
@@ -34,50 +42,42 @@ if (!fs.existsSync(dbDir)) {
 
 const db = new Database(dbPath);
 
-// Create tables if they don't exist
-db.exec(`
-  CREATE TABLE IF NOT EXISTS quiz_results (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    first_name TEXT NOT NULL,
-    last_name TEXT NOT NULL,
-    total_score INTEGER NOT NULL,
-    test1_score INTEGER,
-    test2_score INTEGER,
-    test3_score INTEGER,
-    test4_score INTEGER,
-    test1_result TEXT,
-    test2_result TEXT,
-    test3_result TEXT,
-    test4_result TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
+// Database initialization
+function initializeDatabase() {
+  // Enable foreign keys
+  db.pragma('foreign_keys = ON');
 
-  CREATE TABLE IF NOT EXISTS section_scores (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    result_id INTEGER NOT NULL,
-    section_title TEXT NOT NULL,
-    score INTEGER NOT NULL,
-    max_score INTEGER NOT NULL,
-    section_result TEXT NOT NULL,
-    FOREIGN KEY (result_id) REFERENCES quiz_results(id)
-  );
+  // Create tables with proper foreign key constraints
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS quiz_results (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      first_name TEXT,
+      last_name TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      total_score INTEGER
+    );
 
-  CREATE TABLE IF NOT EXISTS detailed_answers (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    result_id INTEGER NOT NULL,
-    section_title TEXT NOT NULL,
-    question_id INTEGER NOT NULL,
-    question_text TEXT NOT NULL,
-    answer_text TEXT NOT NULL,
-    answer_index INTEGER NOT NULL,
-    possible_score INTEGER NOT NULL,
-    score INTEGER NOT NULL,
-    FOREIGN KEY (result_id) REFERENCES quiz_results(id)
-  );
-`);
+    CREATE TABLE IF NOT EXISTS section_scores (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      result_id INTEGER,
+      section_name TEXT,
+      score INTEGER,
+      FOREIGN KEY (result_id) REFERENCES quiz_results(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS detailed_answers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      result_id INTEGER,
+      question_id TEXT,
+      answer TEXT,
+      is_correct BOOLEAN,
+      FOREIGN KEY (result_id) REFERENCES quiz_results(id) ON DELETE CASCADE
+    );
+  `);
+}
 
 // Initialize database tables - only called from admin panel
-async function initializeDatabase() {
+async function initializeDatabaseTables() {
   try {
     // Drop existing tables
     db.exec('DROP TABLE IF EXISTS detailed_answers');
@@ -88,41 +88,27 @@ async function initializeDatabase() {
     db.exec(`
       CREATE TABLE IF NOT EXISTS quiz_results (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        first_name TEXT NOT NULL,
-        last_name TEXT NOT NULL,
-        total_score INTEGER NOT NULL,
-        test1_score INTEGER,
-        test2_score INTEGER,
-        test3_score INTEGER,
-        test4_score INTEGER,
-        test1_result TEXT,
-        test2_result TEXT,
-        test3_result TEXT,
-        test4_result TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        first_name TEXT,
+        last_name TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        total_score INTEGER
       );
 
       CREATE TABLE IF NOT EXISTS section_scores (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        result_id INTEGER NOT NULL,
-        section_title TEXT NOT NULL,
-        score INTEGER NOT NULL,
-        max_score INTEGER NOT NULL,
-        section_result TEXT NOT NULL,
-        FOREIGN KEY (result_id) REFERENCES quiz_results(id)
+        result_id INTEGER,
+        section_name TEXT,
+        score INTEGER,
+        FOREIGN KEY (result_id) REFERENCES quiz_results(id) ON DELETE CASCADE
       );
 
       CREATE TABLE IF NOT EXISTS detailed_answers (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        result_id INTEGER NOT NULL,
-        section_title TEXT NOT NULL,
-        question_id INTEGER NOT NULL,
-        question_text TEXT NOT NULL,
-        answer_text TEXT NOT NULL,
-        answer_index INTEGER NOT NULL,
-        possible_score INTEGER NOT NULL,
-        score INTEGER NOT NULL,
-        FOREIGN KEY (result_id) REFERENCES quiz_results(id)
+        result_id INTEGER,
+        question_id TEXT,
+        answer TEXT,
+        is_correct BOOLEAN,
+        FOREIGN KEY (result_id) REFERENCES quiz_results(id) ON DELETE CASCADE
       );
     `);
 
@@ -277,27 +263,51 @@ async function exportToExcel(results) {
   return await workbook.xlsx.writeBuffer();
 }
 
-// Secret key for JWT
+// Environment variables
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
+const ADMIN_PASSWORD = 'admin123';
 const JWT_SECRET = 'your-secret-key-here';
-const ADMIN_PASSWORD = 'admin123'; // Change this to a secure password
 
-// Authentication middleware
-const authenticateToken = (req, res, next) => {
+// Admin login endpoint
+app.post('/api/admin/login', (req, res) => {
+  console.log('Login attempt:', req.body);
+  console.log('Headers:', req.headers);
+  
+  const { password } = req.body;
+
+  if (password === ADMIN_PASSWORD) {
+    console.log('Login successful');
+    const token = jwt.sign({ role: 'admin' }, JWT_SECRET, { expiresIn: '1h' });
+    res.json({ token });
+  } else {
+    console.log('Login failed: invalid password');
+    res.status(401).json({ error: 'Invalid password' });
+  }
+});
+
+// Middleware to authenticate token
+function authenticateToken(req, res, next) {
+  console.log('Authenticating request to:', req.path);
+  console.log('Auth headers:', req.headers.authorization);
+  
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
   if (!token) {
+    console.log('No token provided');
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) {
+      console.log('Token verification failed:', err.message);
       return res.status(403).json({ error: 'Invalid token' });
     }
+    console.log('Token verified for user:', user);
     req.user = user;
     next();
   });
-};
+}
 
 app.get('/api/questions', (req, res) => {
   try {
@@ -324,23 +334,23 @@ app.post('/api/results', async (req, res) => {
     const test4Result = calculateTestResult(4, test4Score);
 
     // Insert main result
-    const insertResult = db.prepare('INSERT INTO quiz_results (first_name, last_name, total_score, test1_score, test2_score, test3_score, test4_score, test1_result, test2_result, test3_result, test4_result) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-    const result = insertResult.run(firstName, lastName, totalScore, test1Score, test2Score, test3Score, test4Score, test1Result, test2Result, test3Result, test4Result);
+    const insertResult = db.prepare('INSERT INTO quiz_results (first_name, last_name, total_score) VALUES (?, ?, ?)');
+    const result = insertResult.run(firstName, lastName, totalScore);
 
     const resultId = result.lastInsertRowid;
 
     // Insert section scores with results
-    const insertSectionScore = db.prepare('INSERT INTO section_scores (result_id, section_title, score, max_score, section_result) VALUES (?, ?, ?, ?, ?)');
+    const insertSectionScore = db.prepare('INSERT INTO section_scores (result_id, section_name, score) VALUES (?, ?, ?)');
     for (let i = 0; i < sectionScores.length; i++) {
       const section = sectionScores[i];
       const sectionResult = calculateTestResult(i + 1, section.score);
-      insertSectionScore.run(resultId, section.section_title, section.score, section.max_score, sectionResult);
+      insertSectionScore.run(resultId, section.section_name, section.score);
     }
 
     // Insert detailed answers
-    const insertDetailedAnswer = db.prepare('INSERT INTO detailed_answers (result_id, section_title, question_id, question_text, answer_text, answer_index, possible_score, score) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    const insertDetailedAnswer = db.prepare('INSERT INTO detailed_answers (result_id, question_id, answer, is_correct) VALUES (?, ?, ?, ?)');
     for (const answer of detailedAnswers) {
-      insertDetailedAnswer.run(resultId, answer.section_title, answer.question_id, answer.question_text, answer.answer_text, answer.answer_index, answer.possible_score, answer.score);
+      insertDetailedAnswer.run(resultId, answer.question_id, answer.answer, answer.is_correct);
     }
 
     res.json({ 
@@ -379,8 +389,8 @@ app.post('/api/results/excel', authenticateToken, async (req, res) => {
 
     // Get section scores and detailed answers for each result
     const detailedResults = await Promise.all(results.map(async (result) => {
-      const sectionScores = db.prepare('SELECT * FROM section_scores WHERE result_id = ? ORDER BY section_title').all(result.id);
-      const answers = db.prepare('SELECT * FROM detailed_answers WHERE result_id = ? ORDER BY section_title, question_id').all(result.id);
+      const sectionScores = db.prepare('SELECT * FROM section_scores WHERE result_id = ? ORDER BY section_name').all(result.id);
+      const answers = db.prepare('SELECT * FROM detailed_answers WHERE result_id = ? ORDER BY question_id').all(result.id);
       
       return {
         ...result,
@@ -397,151 +407,6 @@ app.post('/api/results/excel', authenticateToken, async (req, res) => {
   }
 });
 
-// Admin login endpoint
-app.post('/api/admin/login', (req, res) => {
-  const { password } = req.body;
-
-  if (password === ADMIN_PASSWORD) {
-    const token = jwt.sign({ role: 'admin' }, JWT_SECRET, { expiresIn: '1h' });
-    res.json({ token });
-  } else {
-    res.status(401).json({ error: 'Invalid password' });
-  }
-});
-
-app.get('/api/results', authenticateToken, async (req, res) => {
-  try {
-    const results = db.prepare('SELECT * FROM quiz_results ORDER BY created_at DESC').all();
-    const fullResults = await Promise.all(results.map(async (result) => {
-      const sectionScores = db.prepare('SELECT * FROM section_scores WHERE result_id = ?').all(result.id);
-      const detailedAnswers = db.prepare('SELECT * FROM detailed_answers WHERE result_id = ?').all(result.id);
-      
-      return {
-        ...result,
-        sectionScores,
-        detailedAnswers
-      };
-    }));
-
-    res.json(fullResults);
-  } catch (error) {
-    console.error('Error getting results:', error);
-    res.status(500).json({ error: 'Failed to get results' });
-  }
-});
-
-app.get('/api/results/csv', authenticateToken, async (req, res) => {
-  try {
-    const { from, to, name } = req.query;
-    let query = `
-      SELECT * FROM quiz_results 
-      WHERE 1=1
-    `;
-    const params = [];
-
-    if (from) {
-      query += ` AND DATE(created_at) >= DATE(?)`;
-      params.push(from);
-    }
-    if (to) {
-      query += ` AND DATE(created_at) <= DATE(?)`;
-      params.push(to);
-    }
-    if (name) {
-      query += ` AND (first_name LIKE ? OR last_name LIKE ?)`;
-      params.push(`%${name}%`, `%${name}%`);
-    }
-    query += ` ORDER BY created_at DESC`;
-
-    const results = db.prepare(query).all(...params);
-    const csvContent = await exportToCSV(results);
-
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename=test_results.csv');
-    res.send(csvContent);
-  } catch (error) {
-    console.error('Error exporting results:', error);
-    res.status(500).json({ error: 'Failed to export results' });
-  }
-});
-
-app.get('/api/results/excel', authenticateToken, async (req, res) => {
-  try {
-    const { from, to, name } = req.query;
-    let query = `
-      SELECT * FROM quiz_results 
-      WHERE 1=1
-    `;
-    const params = [];
-
-    if (from) {
-      query += ` AND DATE(created_at) >= DATE(?)`;
-      params.push(from);
-    }
-    if (to) {
-      query += ` AND DATE(created_at) <= DATE(?)`;
-      params.push(to);
-    }
-    if (name) {
-      query += ` AND (first_name LIKE ? OR last_name LIKE ?)`;
-      params.push(`%${name}%`, `%${name}%`);
-    }
-    query += ` ORDER BY created_at DESC`;
-
-    const results = db.prepare(query).all(...params);
-    const excelBuffer = await exportToExcel(results);
-
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename=test_results.xlsx');
-    res.send(Buffer.from(excelBuffer));
-  } catch (error) {
-    console.error('Error exporting results:', error);
-    res.status(500).json({ error: 'Failed to export results' });
-  }
-});
-
-// Delete result endpoint
-app.delete('/api/results/:id', authenticateToken, (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    // Начинаем транзакцию
-    const transaction = db.transaction(() => {
-      // Удаляем связанные записи из section_scores
-      db.prepare('DELETE FROM section_scores WHERE result_id = ?').run(id);
-      
-      // Удаляем основную запись
-      const result = db.prepare('DELETE FROM quiz_results WHERE id = ?').run(id);
-      
-      if (result.changes === 0) {
-        throw new Error('Result not found');
-      }
-    });
-
-    transaction();
-    res.json({ message: 'Result deleted successfully' });
-  } catch (error) {
-    console.error('Error deleting result:', error);
-    res.status(500).json({ error: 'Failed to delete result' });
-  }
-});
-
-app.delete('/api/results', authenticateToken, (req, res) => {
-  try {
-    db.exec('BEGIN TRANSACTION');
-    db.exec('DELETE FROM section_scores');
-    db.exec('DELETE FROM detailed_answers');
-    db.exec('DELETE FROM quiz_results');
-    db.exec('COMMIT');
-    
-    res.json({ success: true });
-  } catch (error) {
-    db.exec('ROLLBACK');
-    console.error('Error deleting all results:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
 // Admin endpoint to initialize database
 app.post('/api/admin/init-db', authenticateToken, async (req, res) => {
   try {
@@ -550,6 +415,38 @@ app.post('/api/admin/init-db', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error initializing database:', error);
     res.status(500).json({ error: 'Failed to initialize database' });
+  }
+});
+
+// Admin endpoint to initialize database tables
+app.post('/api/admin/init-db-tables', authenticateToken, async (req, res) => {
+  try {
+    await initializeDatabaseTables();
+    res.json({ success: true, message: 'Database tables initialized successfully' });
+  } catch (error) {
+    console.error('Error initializing database tables:', error);
+    res.status(500).json({ error: 'Failed to initialize database tables' });
+  }
+});
+
+// Reinitialize database endpoint
+app.post('/api/admin/reinit-db', authenticateToken, async (req, res) => {
+  try {
+    // Drop existing tables
+    db.exec('DROP TABLE IF EXISTS detailed_answers');
+    db.exec('DROP TABLE IF EXISTS section_scores');
+    db.exec('DROP TABLE IF EXISTS quiz_results');
+
+    // Initialize with new schema
+    initializeDatabase();
+    
+    res.json({ message: 'Database reinitialized successfully' });
+  } catch (error) {
+    console.error('Error reinitializing database:', error);
+    res.status(500).json({ 
+      error: 'Failed to reinitialize database',
+      details: error.message 
+    });
   }
 });
 
@@ -573,6 +470,159 @@ app.post('/api/admin/reset-database', authenticateToken, (req, res) => {
   } catch (error) {
     console.error('Error resetting database:', error);
     res.status(500).json({ error: 'Failed to reset database' });
+  }
+});
+
+// Delete result endpoint
+app.delete('/api/results/:id', authenticateToken, (req, res) => {
+  console.log('Deleting result with id:', req.params.id);
+  
+  try {
+    const { id } = req.params;
+    
+    // Проверяем существование результата
+    const result = db.prepare('SELECT id FROM quiz_results WHERE id = ?').get(id);
+    if (!result) {
+      console.log('Result not found:', id);
+      return res.status(404).json({ error: 'Result not found' });
+    }
+
+    // Включаем поддержку внешних ключей
+    db.pragma('foreign_keys = ON');
+
+    // Удаляем результат (связанные записи удалятся автоматически благодаря ON DELETE CASCADE)
+    const deleteStmt = db.prepare('DELETE FROM quiz_results WHERE id = ?');
+    const info = deleteStmt.run(id);
+    
+    console.log('Delete operation result:', info);
+
+    if (info.changes === 0) {
+      console.log('No rows were deleted');
+      return res.status(404).json({ error: 'Result not found' });
+    }
+
+    console.log('Successfully deleted result:', id);
+    res.json({ message: 'Result deleted successfully' });
+  } catch (error) {
+    console.error('Error in delete operation:', error);
+    res.status(500).json({ 
+      error: 'Failed to delete result',
+      details: error.message 
+    });
+  }
+});
+
+app.delete('/api/results', authenticateToken, (req, res) => {
+  try {
+    db.exec('BEGIN TRANSACTION');
+    db.exec('DELETE FROM section_scores');
+    db.exec('DELETE FROM detailed_answers');
+    db.exec('DELETE FROM quiz_results');
+    db.exec('COMMIT');
+    
+    res.json({ success: true });
+  } catch (error) {
+    db.exec('ROLLBACK');
+    console.error('Error deleting all results:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Форматирование даты
+function formatDate(dateStr) {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('ru-RU', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+// Получение отфильтрованных результатов
+function getFilteredResults(from, to, name) {
+  let query = `
+    SELECT * FROM quiz_results 
+    WHERE 1=1
+  `;
+  const params = [];
+
+  if (from) {
+    query += ` AND DATE(created_at) >= DATE(?)`;
+    params.push(from);
+  }
+  if (to) {
+    query += ` AND DATE(created_at) <= DATE(?)`;
+    params.push(to);
+  }
+  if (name) {
+    query += ` AND (first_name LIKE ? OR last_name LIKE ?)`;
+    params.push(`%${name}%`, `%${name}%`);
+  }
+  query += ` ORDER BY created_at DESC`;
+
+  const results = db.prepare(query).all(...params);
+  return results.map(result => ({
+    ...result,
+    created_at: formatDate(result.created_at)
+  }));
+}
+
+app.get('/api/results', authenticateToken, (req, res) => {
+  try {
+    const { from, to, name, format } = req.query;
+    const results = getFilteredResults(from, to, name);
+
+    if (format === 'csv') {
+      const csvData = exportToCSV(results);
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=results.csv');
+      res.send(csvData);
+    } else if (format === 'excel') {
+      exportToExcel(results).then(buffer => {
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', 'attachment; filename=results.xlsx');
+        res.send(buffer);
+      });
+    } else {
+      res.json(results);
+    }
+  } catch (error) {
+    console.error('Error getting results:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/results/csv', authenticateToken, async (req, res) => {
+  try {
+    const { from, to, name } = req.query;
+    const results = getFilteredResults(from, to, name);
+    const csvContent = await exportToCSV(results);
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename=test_results.csv');
+    res.send(csvContent);
+  } catch (error) {
+    console.error('Error exporting results:', error);
+    res.status(500).json({ error: 'Failed to export results' });
+  }
+});
+
+app.get('/api/results/excel', authenticateToken, async (req, res) => {
+  try {
+    const { from, to, name } = req.query;
+    const results = getFilteredResults(from, to, name);
+    const excelBuffer = await exportToExcel(results);
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=test_results.xlsx');
+    res.send(Buffer.from(excelBuffer));
+  } catch (error) {
+    console.error('Error exporting results:', error);
+    res.status(500).json({ error: 'Failed to export results' });
   }
 });
 

@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   frontend:
     build:
@@ -5,27 +7,28 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      - "80:80"
-    networks:
-      - app-network
+      - "3000:3000"
     depends_on:
       - backend
+    networks:
+      - app-network
 
   backend:
     build:
       context: ./server
       dockerfile: Dockerfile
     restart: unless-stopped
-    expose:
-      - "3002"
-    networks:
-      - app-network
+    ports:
+      - "3002:3002"
     volumes:
       - ./server:/usr/src/app
+      - ./server/data:/app/data
       - backend_node_modules:/usr/src/app/node_modules
     environment:
       - NODE_ENV=production
       - PORT=3002
+    networks:
+      - app-network
 
 networks:
   app-network:
