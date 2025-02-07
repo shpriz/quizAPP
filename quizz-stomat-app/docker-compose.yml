@@ -3,17 +3,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    restart: unless-stopped
     ports:
-      - "5173:5173"
-    volumes:
-      - ./:/usr/src/app
-      - /usr/src/app/node_modules
-    environment:
-      - NODE_ENV=development
-      - REACT_APP_API_URL=http://backend:3002
-      - CHOKIDAR_USEPOLLING=true
-      - WATCHPACK_POLLING=true
-      - VITE_API_URL=http://backend:3002
+      - "80:80"
+    networks:
+      - app-network
     depends_on:
       - backend
 
@@ -21,17 +15,21 @@ services:
     build:
       context: ./server
       dockerfile: Dockerfile
-    ports:
-      - "3002:3002"
+    restart: unless-stopped
+    expose:
+      - "3002"
+    networks:
+      - app-network
     volumes:
       - ./server:/usr/src/app
-      - /usr/src/app/node_modules
-      - ./server/data:/usr/src/app/data
+      - backend_node_modules:/usr/src/app/node_modules
     environment:
-      - NODE_ENV=development
+      - NODE_ENV=production
       - PORT=3002
-    restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge
 
 volumes:
   backend_node_modules:
-  backend_db:

@@ -43,7 +43,7 @@ const Quiz: React.FC<QuizProps> = ({ firstName, lastName, onComplete }) => {
 
   const fetchQuestions = async () => {
     try {
-      const response = await fetch('http://localhost:3002/api/questions');
+      const response = await fetch('/api/questions');
       if (!response.ok) {
         throw new Error('Failed to fetch questions');
       }
@@ -155,7 +155,7 @@ const Quiz: React.FC<QuizProps> = ({ firstName, lastName, onComplete }) => {
         };
       });
 
-      const response = await fetch('http://localhost:3002/api/results', {
+      const response = await fetch('/api/results', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

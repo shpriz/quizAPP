@@ -1,4 +1,4 @@
-FROM node:18
+FROM node:22
 
 WORKDIR /usr/src/app
 
@@ -25,7 +25,7 @@ RUN npm install -g nodemon
 
 COPY . .
 
-EXPOSE 3001
+EXPOSE 3002
 
 # Start server with nodemon
-CMD ["npm", "run", "dev"]
+CMD ["npm", "start"]
