@@ -1,14 +1,22 @@
 import React, { useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { 
+  Route, 
+  Navigate, 
+  useNavigate,
+  createBrowserRouter,
+  RouterProvider,
+  createRoutesFromElements,
+  Outlet,
+  useOutletContext
+} from 'react-router-dom';
 import Welcome from './components/Welcome';
 import ThankYou from './components/ThankYou';
 import Admin from './components/Admin';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './App.css';
-import { Button } from 'react-bootstrap';
 import Quiz from './components/Quiz';
 
-const AppContent: React.FC = () => {
+const AppLayout: React.FC = () => {
   const navigate = useNavigate();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -22,6 +30,7 @@ const AppContent: React.FC = () => {
   const handleComplete = () => {
     setFirstName('');
     setLastName('');
+    navigate('/thank-you');
   };
 
   const handleAdmin = () => {
@@ -29,76 +38,89 @@ const AppContent: React.FC = () => {
   };
 
   return (
-    <div className="app-container">
-      <nav className="navbar navbar-expand-lg navbar-dark bg-dark">
+    <div className="App">
+      <nav className="navbar navbar-dark bg-primary">
         <div className="container-fluid">
           <span className="navbar-brand">Тест по гигиене полости рта, оказанию стоматологической помощи и образу жизни людей, проживающих в психоневрологических интернатах</span>
           <div className="d-flex">
-            <Button
-              variant="outline-light"
+            <button
+              type="button"
+              className="btn btn-outline-light ms-2"
               onClick={handleAdmin}
-              className="ms-2"
             >
               <i className="bi bi-lock"></i> Панель администратора
-            </Button>
+            </button>
           </div>
         </div>
       </nav>
-      <div className="container mt-4">
-        <Routes>
-          <Route 
-            path="/" 
-            element={
-              <Welcome 
-                onStart={handleStart}
-                onAdmin={handleAdmin}
-              />
-            } 
-          />
-          <Route 
-            path="/quiz" 
-            element={
-              firstName && lastName ? (
-                <Quiz
-                  firstName={firstName}
-                  lastName={lastName}
-                  onComplete={handleComplete}
-                />
-              ) : (
-                <Navigate to="/" />
-              )
-            } 
-          />
-          <Route 
-            path="/thank-you" 
-            element={
-              <ThankYou 
-                onAdmin={handleAdmin} 
-              />
-            } 
-          />
-          <Route 
-            path="/admin" 
-            element={
-              <Admin onBackToWelcome={() => navigate('/')} />
-            } 
-          />
-          <Route 
-            path="*" 
-            element={<Navigate to="/" />} 
-          />
-        </Routes>
+      <div className="content">
+        <Outlet context={{ 
+          firstName, 
+          lastName, 
+          handleStart, 
+          handleComplete, 
+          handleAdmin,
+          navigate 
+        }} />
       </div>
     </div>
   );
 };
 
-const App: React.FC = () => {
+const IndexRoute: React.FC = () => {
+  const context = useOutletContext<{
+    handleStart: (data: { firstName: string; lastName: string }) => void;
+    handleAdmin: () => void;
+  }>();
+  return <Welcome onStart={context.handleStart} onAdmin={context.handleAdmin} />;
+};
+
+const QuizRoute: React.FC = () => {
+  const context = useOutletContext<{
+    firstName: string;
+    lastName: string;
+    handleComplete: () => void;
+  }>();
+  if (!context.firstName || !context.lastName) {
+    return <Navigate to="/" replace />;
+  }
   return (
-    <Router>
-      <AppContent />
-    </Router>
+    <Quiz 
+      firstName={context.firstName}
+      lastName={context.lastName}
+      onComplete={context.handleComplete}
+    />
   );
+};
+
+const ThankYouRoute: React.FC = () => {
+  const context = useOutletContext<{
+    handleAdmin: () => void;
+  }>();
+  return <ThankYou onAdmin={context.handleAdmin} />;
+};
+
+const AdminRoute: React.FC = () => {
+  const context = useOutletContext<{
+    navigate: (path: string) => void;
+  }>();
+  return <Admin onBackToWelcome={() => context.navigate('/')} />;
+};
+
+const router = createBrowserRouter(
+  createRoutesFromElements(
+    <Route element={<AppLayout />}>
+      <Route path="/" element={<IndexRoute />} />
+      <Route path="/quiz" element={<QuizRoute />} />
+      <Route path="/thank-you" element={<ThankYouRoute />} />
+      <Route path="/admin" element={<AdminRoute />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Route>
+  )
+);
+
+const App: React.FC = () => {
+  return <RouterProvider router={router} />;
 };
 
 export default App;

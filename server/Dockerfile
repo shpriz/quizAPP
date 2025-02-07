@@ -15,13 +15,11 @@ RUN apt-get update && \
 ENV CFLAGS="-std=c++17"
 ENV CXXFLAGS="-std=c++17"
 
-# Install nodemon globally
-RUN npm install -g nodemon
-
-COPY package*.json ./
-
 # Install dependencies
+COPY package*.json ./
+RUN npm install -g nodemon
 RUN npm install
+RUN npm install exceljs
 
 # Copy app source
 COPY . .
@@ -29,5 +27,5 @@ COPY . .
 # Expose port
 EXPOSE 3002
 
-# Start app
-CMD ["npm", "run", "dev"]
+# Start the app
+CMD ["nodemon", "server.js"]

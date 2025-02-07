@@ -174,14 +174,9 @@ const Quiz: React.FC<QuizProps> = ({ firstName, lastName, onComplete }) => {
         throw new Error('Failed to save results');
       }
 
-      const data = await response.json();
+      await response.json();
       onComplete();
-      navigate('/thank-you', { 
-        state: { 
-          results: data.testResults,
-          scores: data.testScores
-        } 
-      });
+      navigate('/thank-you');
     } catch (error) {
       console.error('Error saving results:', error);
       setError('Failed to save results. Please try again.');

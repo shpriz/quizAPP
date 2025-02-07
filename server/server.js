@@ -184,9 +184,97 @@ function calculateTestResult(testNumber, score) {
   return 'Нет данных';
 }
 
+async function exportToCSV(results) {
+  const headers = [
+    'ID',
+    'Имя',
+    'Фамилия',
+    'Дата',
+    'Общий балл',
+    'Тест 1 балл',
+    'Тест 1 результат',
+    'Тест 2 балл',
+    'Тест 2 результат',
+    'Тест 3 балл',
+    'Тест 3 результат',
+    'Тест 4 балл',
+    'Тест 4 результат'
+  ].join(',') + '\n';
+
+  const rows = results.map(result => [
+    result.id,
+    result.first_name,
+    result.last_name,
+    new Date(result.created_at).toLocaleString(),
+    result.total_score,
+    result.test1_score,
+    `"${result.test1_result}"`,
+    result.test2_score,
+    `"${result.test2_result}"`,
+    result.test3_score,
+    `"${result.test3_result}"`,
+    result.test4_score,
+    `"${result.test4_result}"`
+  ].join(','));
+
+  return headers + rows.join('\n');
+}
+
 async function exportToExcel(results) {
-  // Removed ExcelJS usage
-  return null;
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet('Результаты тестов');
+
+  // Заголовки
+  worksheet.columns = [
+    { header: 'ID', key: 'id', width: 10 },
+    { header: 'Имя', key: 'first_name', width: 20 },
+    { header: 'Фамилия', key: 'last_name', width: 20 },
+    { header: 'Дата', key: 'created_at', width: 20 },
+    { header: 'Общий балл', key: 'total_score', width: 15 },
+    { header: 'Тест 1 балл', key: 'test1_score', width: 15 },
+    { header: 'Тест 1 результат', key: 'test1_result', width: 30 },
+    { header: 'Тест 2 балл', key: 'test2_score', width: 15 },
+    { header: 'Тест 2 результат', key: 'test2_result', width: 30 },
+    { header: 'Тест 3 балл', key: 'test3_score', width: 15 },
+    { header: 'Тест 3 результат', key: 'test3_result', width: 30 },
+    { header: 'Тест 4 балл', key: 'test4_score', width: 15 },
+    { header: 'Тест 4 результат', key: 'test4_result', width: 30 }
+  ];
+
+  // Стили для заголовков
+  worksheet.getRow(1).font = { bold: true };
+  worksheet.getRow(1).fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FFE0E0E0' }
+  };
+
+  // Добавляем данные
+  for (const result of results) {
+    worksheet.addRow({
+      id: result.id,
+      first_name: result.first_name,
+      last_name: result.last_name,
+      created_at: new Date(result.created_at).toLocaleString(),
+      total_score: result.total_score,
+      test1_score: result.test1_score,
+      test1_result: result.test1_result,
+      test2_score: result.test2_score,
+      test2_result: result.test2_result,
+      test3_score: result.test3_score,
+      test3_result: result.test3_result,
+      test4_score: result.test4_score,
+      test4_result: result.test4_result
+    });
+  }
+
+  // Автоподбор ширины колонок
+  worksheet.columns.forEach(column => {
+    column.width = Math.max(column.width || 10, 10);
+  });
+
+  // Возвращаем буфер с Excel файлом
+  return await workbook.xlsx.writeBuffer();
 }
 
 // Secret key for JWT
@@ -342,69 +430,77 @@ app.get('/api/results', authenticateToken, async (req, res) => {
   }
 });
 
-app.get('/api/results/excel', authenticateToken, async (req, res) => {
+app.get('/api/results/csv', authenticateToken, async (req, res) => {
   try {
     const { from, to, name } = req.query;
-    let query = 'SELECT * FROM quiz_results';
+    let query = `
+      SELECT * FROM quiz_results 
+      WHERE 1=1
+    `;
     const params = [];
 
-    if (from && to) {
-      query += ' WHERE completion_date BETWEEN ? AND ?';
-      params.push(from, to);
+    if (from) {
+      query += ` AND DATE(created_at) >= DATE(?)`;
+      params.push(from);
     }
-
+    if (to) {
+      query += ` AND DATE(created_at) <= DATE(?)`;
+      params.push(to);
+    }
     if (name) {
-      query += params.length ? ' AND' : ' WHERE';
-      query += ' (first_name LIKE ? OR last_name LIKE ?)';
+      query += ` AND (first_name LIKE ? OR last_name LIKE ?)`;
       params.push(`%${name}%`, `%${name}%`);
     }
-
-    query += ' ORDER BY completion_date DESC';
+    query += ` ORDER BY created_at DESC`;
 
     const results = db.prepare(query).all(...params);
+    const csvContent = await exportToCSV(results);
 
-    // Создаем Excel файл
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('Результаты тестирования');
-
-    // Заголовки
-    worksheet.columns = [
-      { header: 'Имя', key: 'first_name', width: 15 },
-      { header: 'Фамилия', key: 'last_name', width: 15 },
-      { header: 'Дата', key: 'completion_date', width: 15 },
-      { header: 'Общий балл', key: 'total_score', width: 15 },
-      { header: 'Тест 1 балл', key: 'test1_score', width: 15 },
-      { header: 'Тест 2 балл', key: 'test2_score', width: 15 },
-      { header: 'Тест 3 балл', key: 'test3_score', width: 15 },
-      { header: 'Тест 4 балл', key: 'test4_score', width: 15 },
-      { header: 'Тест 1 результат', key: 'test1_result', width: 30 },
-      { header: 'Тест 2 результат', key: 'test2_result', width: 30 },
-      { header: 'Тест 3 результат', key: 'test3_result', width: 30 },
-      { header: 'Тест 4 результат', key: 'test4_result', width: 30 }
-    ];
-
-    // Добавляем данные
-    results.forEach(result => {
-      worksheet.addRow({
-        ...result,
-        completion_date: new Date(result.completion_date).toLocaleDateString()
-      });
-    });
-
-    // Стилизация
-    worksheet.getRow(1).font = { bold: true };
-    worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
-
-    // Отправляем файл
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename=results.xlsx');
-    await workbook.xlsx.write(res);
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename=test_results.csv');
+    res.send(csvContent);
   } catch (error) {
-    console.error('Error exporting to Excel:', error);
+    console.error('Error exporting results:', error);
     res.status(500).json({ error: 'Failed to export results' });
   }
 });
 
+app.get('/api/results/excel', authenticateToken, async (req, res) => {
+  try {
+    const { from, to, name } = req.query;
+    let query = `
+      SELECT * FROM quiz_results 
+      WHERE 1=1
+    `;
+    const params = [];
+
+    if (from) {
+      query += ` AND DATE(created_at) >= DATE(?)`;
+      params.push(from);
+    }
+    if (to) {
+      query += ` AND DATE(created_at) <= DATE(?)`;
+      params.push(to);
+    }
+    if (name) {
+      query += ` AND (first_name LIKE ? OR last_name LIKE ?)`;
+      params.push(`%${name}%`, `%${name}%`);
+    }
+    query += ` ORDER BY created_at DESC`;
+
+    const results = db.prepare(query).all(...params);
+    const excelBuffer = await exportToExcel(results);
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=test_results.xlsx');
+    res.send(Buffer.from(excelBuffer));
+  } catch (error) {
+    console.error('Error exporting results:', error);
+    res.status(500).json({ error: 'Failed to export results' });
+  }
+});
+
+// Delete result endpoint
 app.delete('/api/results/:id', authenticateToken, (req, res) => {
   try {
     const { id } = req.params;

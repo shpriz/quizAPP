@@ -29,6 +29,8 @@ const Admin: React.FC<AdminProps> = ({ onBackToWelcome }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [dateFilter, setDateFilter] = useState({ from: '', to: '' });
   const [nameFilter, setNameFilter] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(10);
 
   const fetchResults = async () => {
     try {
@@ -86,7 +88,7 @@ const Admin: React.FC<AdminProps> = ({ onBackToWelcome }) => {
     }
   };
 
-  const handleExport = async () => {
+  const handleExport = async (format: 'csv' | 'excel') => {
     try {
       const token = localStorage.getItem('adminToken');
       const queryParams = new URLSearchParams();
@@ -95,7 +97,7 @@ const Admin: React.FC<AdminProps> = ({ onBackToWelcome }) => {
       if (dateFilter.to) queryParams.append('to', dateFilter.to);
       if (nameFilter) queryParams.append('name', nameFilter);
 
-      const response = await fetch(getApiUrl(`${API_ENDPOINTS.exportExcel}?${queryParams}`), {
+      const response = await fetch(getApiUrl(`${API_ENDPOINTS.results}/${format}?${queryParams}`), {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -109,11 +111,11 @@ const Admin: React.FC<AdminProps> = ({ onBackToWelcome }) => {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'results.xlsx';
+      a.download = `test_results.${format}`;
       document.body.appendChild(a);
       a.click();
-      document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Произошла ошибка при экспорте');
     }
@@ -123,7 +125,8 @@ const Admin: React.FC<AdminProps> = ({ onBackToWelcome }) => {
     if (!window.confirm('ВНИМАНИЕ! Это действие удалит ВСЕ результаты тестирования. Вы уверены?')) {
       return;
     }
-    if (!window.prompt('Для подтверждения введите "УДАЛИТЬ"') === 'УДАЛИТЬ') {
+    const confirmText = window.prompt('Для подтверждения введите "УДАЛИТЬ"');
+    if (confirmText !== 'УДАЛИТЬ') {
       return;
     }
 
@@ -163,6 +166,10 @@ const Admin: React.FC<AdminProps> = ({ onBackToWelcome }) => {
 
     return matchesName && matchesDate;
   });
+
+  const totalPages = Math.ceil(filteredResults.length / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
 
   return (
     <Container className="mt-4">
@@ -205,15 +212,69 @@ const Admin: React.FC<AdminProps> = ({ onBackToWelcome }) => {
               </Form.Group>
             </Col>
           </Row>
-          <Button variant="primary" onClick={handleExport} className="mt-3">
-            Экспортировать результаты
-          </Button>
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <Form.Group>
+              <Form.Label>Строк на странице</Form.Label>
+              <Form.Select 
+                value={pageSize} 
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setCurrentPage(1); // Сбрасываем на первую страницу при изменении размера
+                }}
+                className="w-auto ms-2"
+              >
+                <option value="10">10</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </Form.Select>
+            </Form.Group>
+
+            <div>
+              <Button 
+                variant="outline-primary" 
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+                className="me-2"
+              >
+                &lt; Предыдущая
+              </Button>
+              <span className="mx-2">
+                Страница {currentPage} из {totalPages}
+              </span>
+              <Button 
+                variant="outline-primary" 
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+                className="ms-2"
+              >
+                Следующая &gt;
+              </Button>
+            </div>
+          </div>
+          <div className="mb-3">
+            <Button 
+              variant="success" 
+              onClick={() => handleExport('excel')} 
+              className="me-2"
+            >
+              <i className="bi bi-file-excel me-1"></i>
+              Экспорт в Excel
+            </Button>
+            <Button 
+              variant="info" 
+              onClick={() => handleExport('csv')}
+            >
+              <i className="bi bi-file-text me-1"></i>
+              Экспорт в CSV
+            </Button>
+          </div>
         </Card.Body>
       </Card>
 
       <Table striped bordered hover>
         <thead>
           <tr>
+            <th>ID</th>
             <th>Имя</th>
             <th>Фамилия</th>
             <th>Дата</th>
@@ -222,8 +283,9 @@ const Admin: React.FC<AdminProps> = ({ onBackToWelcome }) => {
           </tr>
         </thead>
         <tbody>
-          {filteredResults.map((result) => (
+          {filteredResults.slice(startIndex, endIndex).map((result) => (
             <tr key={result.id}>
+              <td>{result.id}</td>
               <td>{result.first_name}</td>
               <td>{result.last_name}</td>
               <td>{new Date(result.completion_date).toLocaleDateString()}</td>
