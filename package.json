@@ -1,34 +1,36 @@
 {
   "name": "quizz-stomat-app",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
+  "version": "1.0.0",
+  "description": "Тест по гигиене полости рта, оказанию стоматологической помощи и образу жизни людей, проживающих в психоневрологических интернатах",
+  "homepage": "https://github.com/shpriz/quizAPP#readme",
+  "bugs": {
+    "url": "https://github.com/shpriz/quizAPP/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shpriz/quizAPP.git"
+  },
+  "license": "ISC",
+  "author": "Alexey Karyakin (Shpriz)",
+  "type": "commonjs",
+  "main": "eslint.config.js",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
-    "@types/react-bootstrap": "^0.32.37",
-    "bootstrap": "^5.3.3",
-    "react": "^18.2.0",
-    "react-bootstrap": "^2.10.0",
-    "react-dom": "^18.2.0",
-    "react-router": "^6.22.0",
-    "react-router-dom": "^6.22.0"
-  },
-  "devDependencies": {
-    "@types/node": "^20.11.16",
-    "@types/react": "^18.2.43",
-    "@types/react-dom": "^18.2.17",
-    "@typescript-eslint/eslint-plugin": "^6.14.0",
-    "@typescript-eslint/parser": "^6.14.0",
-    "@vitejs/plugin-react": "^4.2.1",
-    "eslint": "^8.55.0",
-    "eslint-plugin-react-hooks": "^4.6.0",
-    "eslint-plugin-react-refresh": "^0.4.5",
-    "typescript": "^5.2.2",
-    "vite": "^6.1.0"
+    "@types/node": "^22.13.1",
+    "@types/react": "^19.0.8",
+    "@types/react-dom": "^19.0.3",
+    "@typescript-eslint/eslint-plugin": "^8.23.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "eslint": "^9.19.0",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "eslint-plugin-react-refresh": "^0.4.18",
+    "react": "^19.0.0",
+    "react-bootstrap": "^2.10.9",
+    "react-dom": "^19.0.0",
+    "react-router": "^7.1.5",
+    "react-router-dom": "^7.1.5",
+    "typescript": "^5.7.3"
   }
 }
