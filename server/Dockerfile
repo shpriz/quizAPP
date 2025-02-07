@@ -20,12 +20,9 @@ COPY package*.json ./
 # Install dependencies
 RUN npm install
 
-# Install nodemon globally
-RUN npm install -g nodemon
-
+# Copy source code
 COPY . .
 
 EXPOSE 3002
 
-# Start server with nodemon
 CMD ["npm", "start"]
