@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Container, Button, Alert, ProgressBar } from 'react-bootstrap';
 import './Quiz.css';
+import { API_ENDPOINTS, getApiUrl } from '../config/api';
 
 interface Question {
   id: number;
@@ -43,7 +44,7 @@ const Quiz: React.FC<QuizProps> = ({ firstName, lastName, onComplete }) => {
 
   const fetchQuestions = async () => {
     try {
-      const response = await fetch('/api/questions');
+      const response = await fetch(getApiUrl(API_ENDPOINTS.questions));
       if (!response.ok) {
         throw new Error('Failed to fetch questions');
       }
@@ -155,7 +156,7 @@ const Quiz: React.FC<QuizProps> = ({ firstName, lastName, onComplete }) => {
         };
       });
 
-      const response = await fetch('/api/results', {
+      const response = await fetch(getApiUrl(API_ENDPOINTS.results), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

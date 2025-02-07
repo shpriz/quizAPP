@@ -8,7 +8,15 @@ const jwt = require('jsonwebtoken');
 const XLSX = require('xlsx');
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: [
+    'http://stomtest.nsmu.ru:5173',
+    'http://stomtest.nsmu.ru',
+    'http://localhost:5173',
+    'http://localhost:3000'
+  ],
+  credentials: true
+}));
 app.use(express.json());
 
 // Read quiz data from JSON file

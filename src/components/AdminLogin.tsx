@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Container, Card, Form, Button, Alert } from 'react-bootstrap';
+import { API_ENDPOINTS, getApiUrl } from '../config/api';
 
 interface AdminLoginProps {
   onLogin: (success: boolean) => void;
@@ -12,7 +13,7 @@ const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await fetch('http://localhost:3002/api/admin/login', {
+      const response = await fetch(getApiUrl(API_ENDPOINTS.adminLogin), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

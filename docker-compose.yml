@@ -6,13 +6,6 @@ services:
     restart: unless-stopped
     ports:
       - "5173:5173"
-    volumes:
-      - ./:/usr/src/app
-      - /usr/src/app/node_modules
-    environment:
-      - NODE_ENV=development
-      - CHOKIDAR_USEPOLLING=true
-      - WATCHPACK_POLLING=true
     networks:
       - app-network
     depends_on:
@@ -23,15 +16,15 @@ services:
       context: ./server
       dockerfile: Dockerfile
     restart: unless-stopped
-    ports:
-      - "3002:3002"
+    expose:
+      - "3002"
     networks:
       - app-network
     volumes:
       - ./server:/usr/src/app
       - backend_node_modules:/usr/src/app/node_modules
     environment:
-      - NODE_ENV=development
+      - NODE_ENV=production
       - PORT=3002
 
 networks:
