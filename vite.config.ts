@@ -18,7 +18,7 @@ export default defineConfig(({ mode }) => ({
     rollupOptions: {
       output: {
         manualChunks: {
-          vendor: ['react', 'react-dom'],
+          vendor: ['react', 'react-dom', 'react-router-dom', 'react-bootstrap'],
           // Другие зависимости, которые нужно разделить
         }
       }
@@ -45,5 +45,13 @@ export default defineConfig(({ mode }) => ({
     alias: {
       '@': resolve(__dirname, 'src'),
     }
-  }
+  },
+
+  css: {
+    preprocessorOptions: {
+      scss: {
+        additionalData: `@import "bootstrap/dist/css/bootstrap.min.css";`
+      }
+    }
+  },
 }))
