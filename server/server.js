@@ -894,7 +894,7 @@ app.post('/api/admin/init-db-tables', authenticateToken, async (req, res) => {
 });
 
 // Reinitialize database endpoint
-app.post('/admin/reinit-db', authenticateToken, async (req, res) => {
+app.post('/api/admin/reinit-db', authenticateToken, async (req, res) => {
   try {
     logger.info('Reinitializing database...');
     
@@ -1039,7 +1039,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // Error handling middleware
-app.use((err, req, res, next) => {
+app.use((err, res)  => {
   logger.error('Error:', err.stack);
   res.status(err.status || 500).json({
     error: {
@@ -1047,6 +1047,16 @@ app.use((err, req, res, next) => {
       status: err.status || 500
     }
   });
+});
+
+// Error handling middleware should be last
+app.use('/api/*', (res) => {
+  res.status(404).json({ error: 'Not Found' });
+});
+
+app.use((err, res ) => {
+  logger.error('Unhandled error:', err);
+  res.status(500).json({ error: 'Internal Server Error' });
 });
 
 // Handle uncaught exceptions
