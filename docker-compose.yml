@@ -5,29 +5,19 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
       - VITE_API_URL=http://194.87.69.156:3002
     networks:
       - app-network
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
   backend:
     build:
       context: ./server
       dockerfile: Dockerfile
-    restart: unless-stopped
     ports:
       - "3002:3002"
-    volumes:
-      - quiz_data:/app/data
-      - quiz_logs:/app/logs
     environment:
       - NODE_ENV=production
       - PORT=3002
@@ -35,11 +25,6 @@ services:
       - CORS_ORIGIN=http://194.87.69.156:3000
     networks:
       - app-network
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3002/api"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
 networks:
   app-network:
