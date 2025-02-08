@@ -2,25 +2,32 @@ FROM node:20-bullseye
 
 WORKDIR /app
 
-# Устанавливаем зависимости для сборки
-RUN apt-get update && apt-get install -y python3 python3-pip make g++ && rm -rf /var/lib/apt/lists/*
+# Install build dependencies
+RUN apt-get update && \
+    apt-get install -y \
+    python3 \
+    make \
+    g++ \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# Копируем package файлы
+# Copy package files
 COPY package*.json ./
 
-# Устанавливаем зависимости
-RUN npm ci --omit=dev --cache /tmp/npm-cache && rm -rf /tmp/npm-cache
+# Install dependencies
+RUN npm install --omit=dev
 
-# Копируем все файлы
+# Copy all files
 COPY . .
 
-# Создаем директории и задаем права
-RUN mkdir -p /app/data /app/logs && chown -R node:node /app
+# Create directories and set permissions
+RUN mkdir -p /app/data /app/logs && \
+    chown -R node:node /app
 
-# Переключаемся на пользователя node
+# Switch to node user
 USER node
 
-# Открываем порты
+# Expose ports
 EXPOSE 3002
 
 CMD ["node", "server.js"]

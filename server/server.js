@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const Database = require('better-sqlite3');
+const sqlite3 = require('sqlite3').verbose();
 const fs = require('fs');
 const path = require('path');
 const jwt = require('jsonwebtoken');
@@ -95,10 +95,22 @@ if (!fs.existsSync(dbDir)) {
   fs.mkdirSync(dbDir, { recursive: true });
 }
 
-const db = new Database(dbPath, { verbose: console.log });
-
-// Enable foreign keys
-db.pragma('foreign_keys = ON');
+let db;
+try {
+  db = new sqlite3.Database(dbPath, (err) => {
+    if (err) {
+      logger.error('Error opening database:', err);
+      throw err;
+    }
+    logger.info('Connected to SQLite database');
+    
+    // Enable foreign keys
+    db.run('PRAGMA foreign_keys = ON');
+  });
+} catch (error) {
+  logger.error('Error initializing database:', error);
+  throw error;
+}
 
 // Calculate overall result level based on total score
 function calculateOverallResult(totalScore) {
@@ -119,59 +131,66 @@ function calculateOverallResult(totalScore) {
 
 // Database initialization - only called from admin panel
 function initializeDatabase() {
-  try {
-    // Drop existing tables in reverse order of dependencies
-    db.exec('DROP TABLE IF EXISTS detailed_answers');
-    db.exec('DROP TABLE IF EXISTS section_scores');
-    db.exec('DROP TABLE IF EXISTS quiz_results');
+  return new Promise((resolve, reject) => {
+    try {
+      // Drop existing tables in reverse order of dependencies
+      const dropTables = [
+        'DROP TABLE IF EXISTS detailed_answers',
+        'DROP TABLE IF EXISTS section_scores',
+        'DROP TABLE IF EXISTS quiz_results'
+      ];
 
-    // Create tables with proper foreign key constraints
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS quiz_results (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        first_name TEXT NOT NULL,
-        last_name TEXT NOT NULL,
-        total_score REAL NOT NULL,
-        overall_result TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      );
+      const createTables = `
+        CREATE TABLE IF NOT EXISTS quiz_results (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          first_name TEXT NOT NULL,
+          last_name TEXT NOT NULL,
+          total_score REAL NOT NULL,
+          overall_result TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
 
-      CREATE TABLE IF NOT EXISTS section_scores (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        result_id INTEGER NOT NULL,
-        section_name TEXT NOT NULL,
-        score REAL NOT NULL,
-        FOREIGN KEY (result_id) REFERENCES quiz_results(id) ON DELETE CASCADE
-      );
+        CREATE TABLE IF NOT EXISTS section_scores (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          result_id INTEGER NOT NULL,
+          section_name TEXT NOT NULL,
+          score REAL NOT NULL,
+          FOREIGN KEY (result_id) REFERENCES quiz_results(id) ON DELETE CASCADE
+        );
 
-      CREATE TABLE IF NOT EXISTS detailed_answers (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        result_id INTEGER NOT NULL,
-        question_id INTEGER NOT NULL,
-        question_text TEXT,
-        answer_text TEXT,
-        answer_index INTEGER,
-        possible_score REAL,
-        score REAL,
-        FOREIGN KEY (result_id) REFERENCES quiz_results(id) ON DELETE CASCADE
-      );
-    `);
-    logger.info('Database tables created successfully');
-  } catch (error) {
-    logger.error('Error initializing database:', error);
-    throw error;
-  }
-}
+        CREATE TABLE IF NOT EXISTS detailed_answers (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          result_id INTEGER NOT NULL,
+          question_id INTEGER NOT NULL,
+          question_text TEXT,
+          answer_text TEXT,
+          answer_index INTEGER,
+          possible_score REAL,
+          score REAL,
+          FOREIGN KEY (result_id) REFERENCES quiz_results(id) ON DELETE CASCADE
+        );
+      `;
 
-// Initialize database tables - only called from admin panel
-async function initializeDatabaseTables() {
-  try {
-    logger.info('Reinitializing database...');
-    initializeDatabase();
-    logger.info('Database tables recreated successfully');
-  } catch (error) {
-    logger.error('Error initializing database:', error);
-  }
+      db.serialize(() => {
+        dropTables.forEach(sql => {
+          db.run(sql);
+        });
+        
+        db.exec(createTables, (err) => {
+          if (err) {
+            logger.error('Error creating tables:', err);
+            reject(err);
+          } else {
+            logger.info('Database tables created successfully');
+            resolve();
+          }
+        });
+      });
+    } catch (error) {
+      logger.error('Error initializing database:', error);
+      reject(error);
+    }
+  });
 }
 
 function calculateTestResult(testNumber, score) {
@@ -594,9 +613,7 @@ app.post('/api/results', async (req, res) => {
   });
 
   try {
-    db.exec('BEGIN TRANSACTION');
-
-    try {
+    db.serialize(() => {
       // Insert quiz result with overall result
       const resultStmt = db.prepare(`
         INSERT INTO quiz_results (first_name, last_name, total_score, overall_result)
@@ -663,19 +680,14 @@ app.post('/api/results', async (req, res) => {
       } else {
         logger.warn('No detailed answers provided:', detailedAnswers);
       }
+    });
 
-      db.exec('COMMIT');
-      logger.info('Results saved successfully');
-      res.json({ 
-        success: true, 
-        message: 'Results saved successfully',
-        resultId: resultId
-      });
-    } catch (error) {
-      logger.error('Error in transaction:', error);
-      db.exec('ROLLBACK');
-      throw error;
-    }
+    logger.info('Results saved successfully');
+    res.json({ 
+      success: true, 
+      message: 'Results saved successfully',
+      resultId: resultId
+    });
   } catch (error) {
     logger.error('Error saving results:', error);
     res.status(500).json({ error: 'Failed to save results', details: error.message });
@@ -720,7 +732,7 @@ function getFilteredResults(from, to, name) {
     query += ` GROUP BY r.id ORDER BY r.created_at DESC`;
 
     logger.info('Running query:', query, 'with params:', params);
-    const results = db.prepare(query).all(...params);
+    const results = db.all(query, params);
     
     return results.map(result => {
       // Parse section scores
@@ -840,7 +852,7 @@ app.post('/api/admin/init-db', authenticateToken, async (req, res) => {
 // Admin endpoint to initialize database tables
 app.post('/api/admin/init-db-tables', authenticateToken, async (req, res) => {
   try {
-    await initializeDatabaseTables();
+    await initializeDatabase();
     res.json({ success: true, message: 'Database tables initialized successfully' });
   } catch (error) {
     logger.error('Error initializing database tables:', error);
@@ -854,15 +866,11 @@ app.post('/api/admin/reinit-db', authenticateToken, async (req, res) => {
     logger.info('Reinitializing database...');
     
     // Start transaction
-    db.exec('BEGIN TRANSACTION');
-    
-    try {
+    db.serialize(() => {
       // Drop existing tables
-      db.exec(`
-        DROP TABLE IF EXISTS detailed_answers;
-        DROP TABLE IF EXISTS section_scores;
-        DROP TABLE IF EXISTS quiz_results;
-      `);
+      db.run('DROP TABLE IF EXISTS detailed_answers');
+      db.run('DROP TABLE IF EXISTS section_scores');
+      db.run('DROP TABLE IF EXISTS quiz_results');
       
       // Recreate tables
       db.exec(`
@@ -895,16 +903,10 @@ app.post('/api/admin/reinit-db', authenticateToken, async (req, res) => {
           FOREIGN KEY (result_id) REFERENCES quiz_results(id) ON DELETE CASCADE
         );
       `);
+    });
 
-      // Commit transaction
-      db.exec('COMMIT');
-      logger.info('Database reinitialized successfully');
-      res.json({ success: true, message: 'Database reinitialized successfully' });
-    } catch (error) {
-      // Rollback on error
-      db.exec('ROLLBACK');
-      throw error;
-    }
+    logger.info('Database reinitialized successfully');
+    res.json({ success: true, message: 'Database reinitialized successfully' });
   } catch (error) {
     logger.error('Error reinitializing database:', error);
     res.status(500).json({ error: 'Failed to reinitialize database' });
@@ -916,17 +918,16 @@ app.post('/api/admin/reset-database', authenticateToken, async (req, res) => {
   try {
     logger.info('Resetting database...');
     
-    db.exec('BEGIN TRANSACTION');
-    db.exec('DELETE FROM section_scores');
-    db.exec('DELETE FROM detailed_answers');
-    db.exec('DELETE FROM quiz_results');
-    db.exec('COMMIT');
+    db.serialize(() => {
+      db.run('DELETE FROM section_scores');
+      db.run('DELETE FROM detailed_answers');
+      db.run('DELETE FROM quiz_results');
+    });
     
     logger.info('Database reset successfully');
     return res.json({ message: 'Database reset successfully' });
   } catch (error) {
     logger.error('Error resetting database:', error);
-    db.exec('ROLLBACK');
     return res.status(500).json({ error: error.message });
   }
 });
@@ -937,13 +938,13 @@ app.delete('/api/results/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
     
     // Check if result exists
-    const result = db.prepare('SELECT id FROM quiz_results WHERE id = ?').get(id);
+    const result = db.get('SELECT id FROM quiz_results WHERE id = ?', id);
     if (!result) {
       return res.status(404).json({ error: 'Result not found' });
     }
 
     // Enable foreign key support
-    db.pragma('foreign_keys = ON');
+    db.run('PRAGMA foreign_keys = ON');
 
     // Delete result (related records will be deleted automatically due to ON DELETE CASCADE)
     const deleteStmt = db.prepare('DELETE FROM quiz_results WHERE id = ?');
@@ -965,15 +966,14 @@ app.delete('/api/results/:id', authenticateToken, async (req, res) => {
 
 app.delete('/api/results', authenticateToken, async (req, res) => {
   try {
-    db.exec('BEGIN TRANSACTION');
-    db.exec('DELETE FROM section_scores');
-    db.exec('DELETE FROM detailed_answers');
-    db.exec('DELETE FROM quiz_results');
-    db.exec('COMMIT');
+    db.serialize(() => {
+      db.run('DELETE FROM section_scores');
+      db.run('DELETE FROM detailed_answers');
+      db.run('DELETE FROM quiz_results');
+    });
     
     return res.json({ message: 'All results deleted successfully' });
   } catch (error) {
-    db.exec('ROLLBACK');
     logger.error('Error deleting all results:', error);
     return res.status(500).json({ error: error.message });
   }
@@ -997,7 +997,7 @@ function formatDate(dateStr) {
 app.get('/api/health', (req, res) => {
   try {
     // Try a simple database query
-    db.prepare('SELECT 1').get();
+    db.get('SELECT 1');
     res.json({ status: 'healthy', message: 'Service is running' });
   } catch (error) {
     logger.error('Health check failed:', error);
