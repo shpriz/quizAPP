@@ -103,6 +103,23 @@ const db = new Database(dbPath, { verbose: console.log });
 // Enable foreign keys
 db.pragma('foreign_keys = ON');
 
+// Calculate overall result level based on total score
+function calculateOverallResult(totalScore) {
+  if (totalScore >= 99) {
+    return 'Очень плохой уровень осуществления гигиены полости рта, оказания стоматологической помощи и поддержания здорового образа жизни людей, проживающих в психоневрологических интернатах, в рамках сестринского ухода';
+  } else if (totalScore >= 83) {
+    return 'Плохой уровень осуществления гигиены полости рта, оказания стоматологической помощи и поддержания здорового образа жизни людей, проживающих в психоневрологических интернатах, в рамках сестринского ухода';
+  } else if (totalScore >= 67) {
+    return 'Неудовлетворительный уровень осуществления гигиены полости рта, оказания стоматологической помощи и поддержания здорового образа жизни людей, проживающих в психоневрологических интернатах, в рамках сестринского ухода';
+  } else if (totalScore >= 51) {
+    return 'Удовлетворительный уровень осуществления гигиены полости рта, оказания стоматологической помощи и поддержания здорового образа жизни людей, проживающих в психоневрологических интернатах, в рамках сестринского ухода';
+  } else if (totalScore >= 35) {
+    return 'Высокий уровень осуществления гигиены полости рта, оказания стоматологической помощи и поддержания здорового образа жизни людей, проживающих в психоневрологических интернатах, в рамках сестринского ухода';
+  } else {
+    return 'Недостаточно баллов для оценки';
+  }
+}
+
 // Database initialization - only called from admin panel
 function initializeDatabase() {
   try {
@@ -113,31 +130,32 @@ function initializeDatabase() {
 
     // Create tables with proper foreign key constraints
     db.exec(`
-      CREATE TABLE quiz_results (
+      CREATE TABLE IF NOT EXISTS quiz_results (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        first_name TEXT,
-        last_name TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        total_score INTEGER
+        first_name TEXT NOT NULL,
+        last_name TEXT NOT NULL,
+        total_score REAL NOT NULL,
+        overall_result TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
 
-      CREATE TABLE section_scores (
+      CREATE TABLE IF NOT EXISTS section_scores (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        result_id INTEGER,
-        section_name TEXT,
-        score INTEGER,
+        result_id INTEGER NOT NULL,
+        section_name TEXT NOT NULL,
+        score REAL NOT NULL,
         FOREIGN KEY (result_id) REFERENCES quiz_results(id) ON DELETE CASCADE
       );
 
-      CREATE TABLE detailed_answers (
+      CREATE TABLE IF NOT EXISTS detailed_answers (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        result_id INTEGER,
-        question_id INTEGER,
+        result_id INTEGER NOT NULL,
+        question_id INTEGER NOT NULL,
         question_text TEXT,
         answer_text TEXT,
         answer_index INTEGER,
-        possible_score INTEGER,
-        score INTEGER,
+        possible_score REAL,
+        score REAL,
         FOREIGN KEY (result_id) REFERENCES quiz_results(id) ON DELETE CASCADE
       );
     `);
@@ -218,8 +236,8 @@ async function exportToCSV(results) {
     'Фамилия',
     'Имя',
     'Дата',
-    // Total
     'Общий балл',
+    'Общий результат',
 
     // Block 1
     'Блок 1 (балл)',
@@ -239,6 +257,7 @@ async function exportToCSV(results) {
     'Вопрос 1.5',
     'Ответ 1.5',
     'Балл 1.5',
+
     // Block 2
     'Блок 2 (балл)',
     'Блок 2 (результат)',
@@ -257,6 +276,7 @@ async function exportToCSV(results) {
     'Вопрос 2.5',
     'Ответ 2.5',
     'Балл 2.5',
+
     // Block 3
     'Блок 3 (балл)',
     'Блок 3 (результат)',
@@ -275,6 +295,7 @@ async function exportToCSV(results) {
     'Вопрос 3.5',
     'Ответ 3.5',
     'Балл 3.5',
+
     // Block 4
     'Блок 4 (балл)',
     'Блок 4 (результат)',
@@ -292,8 +313,7 @@ async function exportToCSV(results) {
     'Балл 4.4',
     'Вопрос 4.5',
     'Ответ 4.5',
-    'Балл 4.5',
-    
+    'Балл 4.5'
   ].join(',') + '\n';
 
   // Convert results to rows
@@ -305,8 +325,8 @@ async function exportToCSV(results) {
     // Group answers by block
     const answersByBlock = {};
     detailedAnswers.forEach(answer => {
-      const blockNumber = Math.floor(answer.question_id / 5) + 1;
-      const questionInBlock = (answer.question_id % 5) + 1;
+      const blockNumber = Math.floor((answer.question_id - 1) / 5) + 1;
+      const questionInBlock = ((answer.question_id - 1) % 5) + 1;
       if (!answersByBlock[blockNumber]) {
         answersByBlock[blockNumber] = {};
       }
@@ -318,30 +338,29 @@ async function exportToCSV(results) {
       result.id,
       result.last_name,
       result.first_name,
-      result.created_at
+      result.created_at,
+      totalScore,
+      `"${result.overall_result || calculateOverallResult(totalScore)}"`
     ];
 
     // Add data for each block
     [1, 2, 3, 4].forEach(blockNum => {
       const blockScore = sectionScores[`Блок ${blockNum}`] || 0;
-      const blockResult = calculateTestResult(blockNum, blockScore);
+      const blockResult = calculateTestResult(blockNum, blockScore) || 'Нет данных';
       
       // Add block score and result
-      rowData.push(blockScore, blockResult);
+      rowData.push(blockScore, `"${blockResult}"`);
 
       // Add questions and answers for this block
       [1, 2, 3, 4, 5].forEach(questionNum => {
         const answer = answersByBlock[blockNum]?.[questionNum] || {};
         rowData.push(
-          answer.question || '',
-          answer.answer || '',
+          `"${answer.question_text || ''}"`,
+          `"${answer.answer_text || ''}"`,
           answer.score || 0
         );
       });
     });
-
-    // Add total score
-    rowData.push(totalScore);
 
     return rowData.join(',');
   });
@@ -370,7 +389,8 @@ async function exportToExcel(results) {
       { header: 'Фамилия', key: 'lastName', width: 20 },
       { header: 'Имя', key: 'firstName', width: 20 },
       { header: 'Дата', key: 'date', width: 20 },
-      { header: 'Общий балл', key: 'totalScore', width: 15 }
+      { header: 'Общий балл', key: 'totalScore', width: 15 },
+      { header: 'Общий результат', key: 'overallResult', width: 80 }
     ];
 
     // Add columns for each block
@@ -413,14 +433,10 @@ async function exportToExcel(results) {
       detailedAnswers.forEach(answer => {
         const blockNumber = Math.floor((answer.question_id - 1) / 5) + 1;
         const questionInBlock = ((answer.question_id - 1) % 5) + 1;
-        
         if (!answersByBlock[blockNumber]) {
           answersByBlock[blockNumber] = {};
         }
-        if (!answersByBlock[blockNumber][questionInBlock]) {
-          answersByBlock[blockNumber][questionInBlock] = answer;
-        }
-        logger.info(`Answer ${answer.question_id} -> Block ${blockNumber}, Question ${questionInBlock}`);
+        answersByBlock[blockNumber][questionInBlock] = answer;
       });
 
       // Prepare row data
@@ -429,7 +445,8 @@ async function exportToExcel(results) {
         lastName: result.last_name,
         firstName: result.first_name,
         date: result.created_at,
-        totalScore: totalScore
+        totalScore: totalScore,
+        overallResult: result.overall_result || calculateOverallResult(totalScore)
       };
 
       // Add data for each block
@@ -443,8 +460,8 @@ async function exportToExcel(results) {
         // Add questions and answers for this block
         [1, 2, 3, 4, 5].forEach(questionNum => {
           const answer = answersByBlock[blockNum]?.[questionNum] || {};
-          rowData[`q${blockNum}_${questionNum}`] = answer.question || '';
-          rowData[`a${blockNum}_${questionNum}`] = answer.answer || '';
+          rowData[`q${blockNum}_${questionNum}`] = answer.question_text || '';
+          rowData[`a${blockNum}_${questionNum}`] = answer.answer_text || '';
           rowData[`s${blockNum}_${questionNum}`] = answer.score || 0;
         });
       });
@@ -568,10 +585,13 @@ app.get('/api/questions', (req, res) => {
 
 app.post('/api/results', async (req, res) => {
   const { firstName, lastName, sectionScores, totalScore, detailedAnswers } = req.body;
+  const overallResult = calculateOverallResult(totalScore);
+  
   logger.info('Saving results:', { 
     firstName, 
     lastName, 
-    totalScore, 
+    totalScore,
+    overallResult,
     sectionScores,
     answerCount: detailedAnswers?.length || 0
   });
@@ -580,12 +600,12 @@ app.post('/api/results', async (req, res) => {
     db.exec('BEGIN TRANSACTION');
 
     try {
-      // Insert quiz result
+      // Insert quiz result with overall result
       const resultStmt = db.prepare(`
-        INSERT INTO quiz_results (first_name, last_name, total_score)
-        VALUES (?, ?, ?)
+        INSERT INTO quiz_results (first_name, last_name, total_score, overall_result)
+        VALUES (?, ?, ?, ?)
       `);
-      const resultInfo = resultStmt.run(firstName, lastName, totalScore);
+      const resultInfo = resultStmt.run(firstName, lastName, totalScore, overallResult);
       const resultId = resultInfo.lastInsertRowid;
 
       // Insert section scores
@@ -723,8 +743,8 @@ function getFilteredResults(from, to, name) {
           const [questionId, questionText, answerText, answerIndex, possibleScore, score] = answer.split('|');
           detailedAnswers.push({
             question_id: parseInt(questionId),
-            question: questionText || '',
-            answer: answerText || '',
+            question_text: questionText || '',
+            answer_text: answerText || '',
             answer_index: parseInt(answerIndex) || 0,
             possible_score: parseFloat(possibleScore) || 0,
             score: parseFloat(score) || 0
@@ -741,6 +761,7 @@ function getFilteredResults(from, to, name) {
         last_name: result.last_name,
         created_at: result.created_at,
         total_score: result.total_score,
+        overall_result: result.overall_result,
         section_scores: sectionScores,
         detailed_answers: detailedAnswers
       };
@@ -853,7 +874,8 @@ app.post('/api/admin/reinit-db', authenticateToken, async (req, res) => {
           first_name TEXT,
           last_name TEXT,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          total_score REAL
+          total_score REAL,
+          overall_result TEXT
         );
 
         CREATE TABLE section_scores (
@@ -871,8 +893,8 @@ app.post('/api/admin/reinit-db', authenticateToken, async (req, res) => {
           question_text TEXT,
           answer_text TEXT,
           answer_index INTEGER,
-          possible_score INTEGER,
-          score INTEGER,
+          possible_score REAL,
+          score REAL,
           FOREIGN KEY (result_id) REFERENCES quiz_results(id) ON DELETE CASCADE
         );
       `);
