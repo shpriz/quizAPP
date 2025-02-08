@@ -27,9 +27,9 @@ export default defineConfig(({ mode }) => ({
 
   // Настройки сервера разработки
   server: {
-    allowedHosts: ['stomtest.nsmu.ru'],
+    allowedHosts: ['stomtest.nsmu.ru', '194.87.69.156', 'localhost'],
     host: true,
-    port: 5173,
+    port: 3000,
     strictPort: true,
     proxy: {
       '/api': {

@@ -18,15 +18,18 @@ const CONFIG = {
   development: {
     allowedOrigins: [
       'http://localhost:3000',
-
+      'http://194.87.69.156:3000',
     ],
     databasePath: path.join(__dirname, 'data', 'quiz-data.json'),
     verbose: true
   },
   production: {
-    allowedOrigins: ['http://stomtest.nsmu.ru', 
-      'https://stomtest.nsmu.ru', 
-      'http://localhost:3000'],
+    allowedOrigins: [
+      'http://stomtest.nsmu.ru', 
+      'http://localhost:3000', 
+      'http://194.87.69.156:3000'
+
+    ],
     databasePath: path.join(__dirname, 'data', 'quiz-data.json'),
     verbose: false
   }
