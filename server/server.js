@@ -607,74 +607,107 @@ app.post('/results', async (req, res) => {
   });
 
   try {
-    db.serialize(() => {
-      // Insert quiz result with overall result
-      const resultStmt = db.prepare(`
-        INSERT INTO quiz_results (first_name, last_name, total_score, overall_result)
-        VALUES (?, ?, ?, ?)
-      `);
-      const resultInfo = resultStmt.run(firstName, lastName, totalScore, overallResult);
-      const resultId = resultInfo.lastInsertRowid;
+    // db.serialize(() => {
+    //   // Insert quiz result with overall result
+    //   const resultStmt = db.prepare(`
+    //     INSERT INTO quiz_results (first_name, last_name, total_score, overall_result)
+    //     VALUES (?, ?, ?, ?)
+    //   `);
+    //   const resultInfo = resultStmt.run(firstName, lastName, totalScore, overallResult);
+    //   const resultId = resultInfo.lastInsertRowid;
 
-      // Insert section scores
-      const sectionScoreStmt = db.prepare(`
-        INSERT INTO section_scores (result_id, section_name, score)
-        VALUES (?, ?, ?)
-      `);
+    //   // Insert section scores
+    //   const sectionScoreStmt = db.prepare(`
+    //     INSERT INTO section_scores (result_id, section_name, score)
+    //     VALUES (?, ?, ?)
+    //   `);
 
-      // Convert section scores to proper format
-      if (Array.isArray(sectionScores)) {
-        sectionScores.forEach((section, index) => {
-          if (!section || typeof section.score !== 'number') {
-            logger.warn('Invalid section score:', section);
-            return;
+    //   // Convert section scores to proper format
+    //   if (Array.isArray(sectionScores)) {
+    //     sectionScores.forEach((section, index) => {
+    //       if (!section || typeof section.score !== 'number') {
+    //         logger.warn('Invalid section score:', section);
+    //         return;
+    //       }
+    //       const sectionNumber = index + 1;
+    //       const sectionName = `Блок ${sectionNumber}`;
+    //       logger.info('Saving section score:', { sectionName, score: section.score });
+    //       sectionScoreStmt.run(resultId, sectionName, section.score);
+    //     });
+    //   } else {
+    //     logger.warn('sectionScores is not an array:', sectionScores);
+    //   }
+
+    //   // Insert detailed answers
+    //   if (Array.isArray(detailedAnswers) && detailedAnswers.length > 0) {
+    //     const answerStmt = db.prepare(`
+    //       INSERT INTO detailed_answers (
+    //         result_id, question_id, question_text, 
+    //         answer_text, answer_index, possible_score, score
+    //       )
+    //       VALUES (?, ?, ?, ?, ?, ?, ?)
+    //     `);
+
+    //     detailedAnswers.forEach(answer => {
+    //       if (!answer) {
+    //         logger.warn('Invalid answer:', answer);
+    //         return;
+    //       }
+
+    //       logger.info('Saving answer:', {
+    //         questionId: answer.question_id,
+    //         question: answer.question_text,
+    //         answer: answer.answer_text,
+    //         score: answer.score
+    //       });
+
+    //       answerStmt.run(
+    //         resultId,
+    //         answer.question_id,
+    //         answer.question_text || '',
+    //         answer.answer_text || '',
+    //         answer.answer_index || 0,
+    //         answer.possible_score || 0,
+    //         answer.score || 0
+    //       );
+    //     });
+    //   } else {
+    //     logger.warn('No detailed answers provided:', detailedAnswers);
+    //   }
+    // });
+    const resultId = await new Promise((resolve, reject) => {
+      db.serialize(() => {
+        db.run(
+          'INSERT INTO results (first_name, last_name, total_score, overall_result, created_at) VALUES (?, ?, ?, ?, datetime("now"))',
+          [firstName, lastName, totalScore, overallResult],
+          function(err) {
+            if (err) reject(err);
+            resolve(this.lastID);
           }
-          const sectionNumber = index + 1;
-          const sectionName = `Блок ${sectionNumber}`;
-          logger.info('Saving section score:', { sectionName, score: section.score });
-          sectionScoreStmt.run(resultId, sectionName, section.score);
-        });
-      } else {
-        logger.warn('sectionScores is not an array:', sectionScores);
-      }
-
-      // Insert detailed answers
-      if (Array.isArray(detailedAnswers) && detailedAnswers.length > 0) {
-        const answerStmt = db.prepare(`
-          INSERT INTO detailed_answers (
-            result_id, question_id, question_text, 
-            answer_text, answer_index, possible_score, score
-          )
-          VALUES (?, ?, ?, ?, ?, ?, ?)
-        `);
-
-        detailedAnswers.forEach(answer => {
-          if (!answer) {
-            logger.warn('Invalid answer:', answer);
-            return;
-          }
-
-          logger.info('Saving answer:', {
-            questionId: answer.question_id,
-            question: answer.question_text,
-            answer: answer.answer_text,
-            score: answer.score
-          });
-
-          answerStmt.run(
-            resultId,
-            answer.question_id,
-            answer.question_text || '',
-            answer.answer_text || '',
-            answer.answer_index || 0,
-            answer.possible_score || 0,
-            answer.score || 0
-          );
-        });
-      } else {
-        logger.warn('No detailed answers provided:', detailedAnswers);
-      }
+        );
+      });
     });
+    // Now resultId is available here
+    await Promise.all([
+      ...sectionScores.map(score => 
+        new Promise((resolve, reject) => {
+          db.run(
+            'INSERT INTO section_scores (result_id, section_number, score) VALUES (?, ?, ?)',
+            [resultId, score.sectionNumber, score.score],
+            err => err ? reject(err) : resolve()
+          );
+        })
+      ),
+      ...detailedAnswers.map(answer => 
+        new Promise((resolve, reject) => {
+          db.run(
+            'INSERT INTO detailed_answers (result_id, question_number, answer, is_correct) VALUES (?, ?, ?, ?)',
+            [resultId, answer.questionNumber, answer.answer, answer.isCorrect],
+            err => err ? reject(err) : resolve()
+          );
+        })
+      )
+    ]);
 
     logger.info('Results saved successfully');
     res.json({ 
@@ -682,6 +715,10 @@ app.post('/results', async (req, res) => {
       message: 'Results saved successfully',
       resultId: resultId
     });
+
+    res.json({ success: true, resultId });
+
+
   } catch (error) {
     logger.error('Error saving results:', error);
     res.status(500).json({ error: 'Failed to save results', details: error.message });
