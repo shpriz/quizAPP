@@ -28,6 +28,7 @@ export default defineConfig(({ mode }) => ({
   server: {
     port: 3000,
     host: true,
+    allowedHosts: ['http://194.87.69.156:3000'],
     cors: {
       origin: ['http://194.87.69.156:3000', 'http://194.87.69.156:3002'],
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
