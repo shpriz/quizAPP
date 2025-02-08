@@ -1,19 +1,31 @@
-const isDevelopment = process.env.NODE_ENV === 'development';
+// Environment configuration
+const DEVELOPMENT_API = 'http://localhost:3002';
+const PRODUCTION_API = 'http://stomtest.nsmu.ru:3002';
 
-// В development используем localhost:3002
-// В production используем текущий домен
+// Check if we're in development mode
+const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+// Get the base API URL based on environment
+export const API_BASE_URL = isDevelopment ? DEVELOPMENT_API : PRODUCTION_API;
+
+// API endpoints
 export const API_ENDPOINTS = {
-  questions: '/api/questions',
-  results: '/api/results',
-  adminLogin: '/api/admin/login',
-  resetDatabase: '/api/admin/reset-database',
-  reinitDatabase: '/api/admin/reinit-db'
-};
+    QUESTIONS: '/api/questions',
+    RESULTS: '/api/results',
+    ADMIN_LOGIN: '/api/admin/login',
+    ADMIN_RESET_DB: '/api/admin/reset-database',
+    ADMIN_REINIT_DB: '/api/admin/reinit-db'
+} as const;
 
-export function getApiUrl(endpoint: string): string {
-  // Фронтенд на 3000, бэкенд на 3002
-  const baseUrl = isDevelopment 
-    ? 'http://localhost:3002'
-    : 'http://stomtest.nsmu.ru:3002';
-  return `${baseUrl}${endpoint}`;
+// Helper function to get full API URL
+export function getApiUrl(endpoint: keyof typeof API_ENDPOINTS): string {
+    return `${API_BASE_URL}${API_ENDPOINTS[endpoint]}`;
 }
+
+// Export configuration for reference
+export const CONFIG = {
+    isDevelopment,
+    apiBaseUrl: API_BASE_URL,
+    frontendPort: isDevelopment ? 5173 : 80,
+    backendPort: 3002
+};

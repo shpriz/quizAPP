@@ -8,85 +8,110 @@ const ExcelJS = require('exceljs');
 
 const app = express();
 
+// Environment variables and configuration
+const isDevelopment = process.env.NODE_ENV === 'development';
+const PORT = process.env.PORT || 3002;
+
+// Development and Production configurations
+const CONFIG = {
+  development: {
+    allowedOrigins: ['http://localhost:5173', 'http://localhost:3000'],
+    databasePath: path.join(__dirname, 'data', 'quiz-data.json'),
+    verbose: true
+  },
+  production: {
+    allowedOrigins: ['http://stomtest.nsmu.ru', 'https://stomtest.nsmu.ru'],
+    databasePath: path.join(__dirname, 'data', 'quiz-data.json'),
+    verbose: false
+  }
+};
+
+// Get current configuration
+const currentConfig = isDevelopment ? CONFIG.development : CONFIG.production;
+
 // CORS configuration
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://stomtest.nsmu.ru',
+  'https://stomtest.nsmu.ru'
+];
+
 app.use(cors({
-  origin: [
-    'http://stomtest.nsmu.ru:3000',
-    'http://localhost:3000',
-    'http://127.0.0.1:3000'
-  ],
+  origin: function(origin, callback) {
+    // allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) === -1) {
+      var msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+      return callback(new Error(msg), false);
+    }
+    return callback(null, true);
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 }));
 
+// Enable pre-flight requests for all routes
+app.options('*', cors());
+
 app.use(express.json());
 
-// Logging middleware
-app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} ${req.method} ${req.url}`);
-  next();
-});
+// Логирование всех запросов (только в development)
+if (isDevelopment) {
+  app.use((req, res, next) => {
+    console.log(`${new Date().toISOString()} ${req.method} ${req.url}`);
+    next();
+  });
+}
 
-// Read quiz data from JSON file
-const quizData = JSON.parse(fs.readFileSync(path.join(__dirname, 'quiz-data.json'), 'utf8'));
+// Load quiz data from JSON file
+let quizData;
+try {
+  const quizDataPath = currentConfig.databasePath;
+  console.log('Loading quiz data from:', quizDataPath);
+  
+  if (!fs.existsSync(quizDataPath)) {
+    console.error('Quiz data file not found:', quizDataPath);
+    throw new Error('Quiz data file not found');
+  }
+  
+  const fileContent = fs.readFileSync(quizDataPath, 'utf8');
+  if (isDevelopment) {
+    console.log('Quiz data file content length:', fileContent.length);
+  }
+  
+  quizData = JSON.parse(fileContent);
+  console.log('Quiz data loaded successfully. Number of sections:', quizData.length);
+} catch (error) {
+  console.error('Error loading quiz data:', error);
+  quizData = [];
+}
 
 // Initialize database
 const dbPath = path.join(__dirname, 'data', 'quiz.db');
 const dbDir = path.dirname(dbPath);
 
-// Create data directory if it doesn't exist
 if (!fs.existsSync(dbDir)) {
   fs.mkdirSync(dbDir, { recursive: true });
 }
 
-const db = new Database(dbPath);
+const db = new Database(dbPath, { verbose: console.log });
 
 // Database initialization
 function initializeDatabase() {
-  // Enable foreign keys
-  db.pragma('foreign_keys = ON');
-
-  // Create tables with proper foreign key constraints
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS quiz_results (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      first_name TEXT,
-      last_name TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      total_score INTEGER
-    );
-
-    CREATE TABLE IF NOT EXISTS section_scores (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      result_id INTEGER,
-      section_name TEXT,
-      score INTEGER,
-      FOREIGN KEY (result_id) REFERENCES quiz_results(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS detailed_answers (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      result_id INTEGER,
-      question_id TEXT,
-      answer TEXT,
-      is_correct BOOLEAN,
-      FOREIGN KEY (result_id) REFERENCES quiz_results(id) ON DELETE CASCADE
-    );
-  `);
-}
-
-// Initialize database tables - only called from admin panel
-async function initializeDatabaseTables() {
   try {
-    // Drop existing tables
+    // Enable foreign keys
+    db.pragma('foreign_keys = ON');
+
+    // Drop existing tables in reverse order of dependencies
     db.exec('DROP TABLE IF EXISTS detailed_answers');
     db.exec('DROP TABLE IF EXISTS section_scores');
     db.exec('DROP TABLE IF EXISTS quiz_results');
 
-    // Create tables with updated schema
+    // Create tables with proper foreign key constraints
     db.exec(`
-      CREATE TABLE IF NOT EXISTS quiz_results (
+      CREATE TABLE quiz_results (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         first_name TEXT,
         last_name TEXT,
@@ -94,7 +119,7 @@ async function initializeDatabaseTables() {
         total_score INTEGER
       );
 
-      CREATE TABLE IF NOT EXISTS section_scores (
+      CREATE TABLE section_scores (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         result_id INTEGER,
         section_name TEXT,
@@ -102,16 +127,30 @@ async function initializeDatabaseTables() {
         FOREIGN KEY (result_id) REFERENCES quiz_results(id) ON DELETE CASCADE
       );
 
-      CREATE TABLE IF NOT EXISTS detailed_answers (
+      CREATE TABLE detailed_answers (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         result_id INTEGER,
-        question_id TEXT,
-        answer TEXT,
-        is_correct BOOLEAN,
+        question_id INTEGER,
+        question_text TEXT,
+        answer_text TEXT,
+        answer_index INTEGER,
+        possible_score INTEGER,
+        score INTEGER,
         FOREIGN KEY (result_id) REFERENCES quiz_results(id) ON DELETE CASCADE
       );
     `);
+    console.log('Database tables created successfully');
+  } catch (error) {
+    console.error('Error initializing database:', error);
+    throw error;
+  }
+}
 
+// Initialize database tables - only called from admin panel
+async function initializeDatabaseTables() {
+  try {
+    console.log('Reinitializing database...');
+    initializeDatabase();
     console.log('Database tables recreated successfully');
   } catch (error) {
     console.error('Error initializing database:', error);
@@ -207,66 +246,118 @@ async function exportToCSV(results) {
 }
 
 async function exportToExcel(results) {
-  const workbook = new ExcelJS.Workbook();
-  const worksheet = workbook.addWorksheet('Результаты тестов');
-
-  // Заголовки
-  worksheet.columns = [
-    { header: 'ID', key: 'id', width: 10 },
-    { header: 'Имя', key: 'first_name', width: 20 },
-    { header: 'Фамилия', key: 'last_name', width: 20 },
-    { header: 'Дата', key: 'created_at', width: 20 },
-    { header: 'Общий балл', key: 'total_score', width: 15 },
-    { header: 'Тест 1 балл', key: 'test1_score', width: 15 },
-    { header: 'Тест 1 результат', key: 'test1_result', width: 30 },
-    { header: 'Тест 2 балл', key: 'test2_score', width: 15 },
-    { header: 'Тест 2 результат', key: 'test2_result', width: 30 },
-    { header: 'Тест 3 балл', key: 'test3_score', width: 15 },
-    { header: 'Тест 3 результат', key: 'test3_result', width: 30 },
-    { header: 'Тест 4 балл', key: 'test4_score', width: 15 },
-    { header: 'Тест 4 результат', key: 'test4_result', width: 30 }
-  ];
-
-  // Стили для заголовков
-  worksheet.getRow(1).font = { bold: true };
-  worksheet.getRow(1).fill = {
-    type: 'pattern',
-    pattern: 'solid',
-    fgColor: { argb: 'FFE0E0E0' }
-  };
-
-  // Добавляем данные
-  for (const result of results) {
-    worksheet.addRow({
-      id: result.id,
-      first_name: result.first_name,
-      last_name: result.last_name,
-      created_at: new Date(result.created_at).toLocaleString(),
-      total_score: result.total_score,
-      test1_score: result.test1_score,
-      test1_result: result.test1_result,
-      test2_score: result.test2_score,
-      test2_result: result.test2_result,
-      test3_score: result.test3_score,
-      test3_result: result.test3_result,
-      test4_score: result.test4_score,
-      test4_result: result.test4_result
+  try {
+    console.log('Starting Excel export with', results.length, 'results');
+    
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'StomatQuiz';
+    workbook.lastModifiedBy = 'StomatQuiz';
+    workbook.created = new Date();
+    workbook.modified = new Date();
+    
+    const worksheet = workbook.addWorksheet('Результаты тестов', {
+      properties: { tabColor: { argb: 'FF00BFFF' } }
     });
+
+    // Заголовки
+    worksheet.columns = [
+      { header: 'ID', key: 'id', width: 10 },
+      { header: 'Фамилия', key: 'last_name', width: 20 },
+      { header: 'Имя', key: 'first_name', width: 20 },
+      { header: 'Дата прохождения', key: 'created_at', width: 20 },
+      { header: 'Общий балл', key: 'total_score', width: 15 },
+      { header: 'Тест 1: Балл', key: 'test1_score', width: 15 },
+      { header: 'Тест 1: Результат', key: 'test1_result', width: 40 },
+      { header: 'Тест 2: Балл', key: 'test2_score', width: 15 },
+      { header: 'Тест 2: Результат', key: 'test2_result', width: 40 },
+      { header: 'Тест 3: Балл', key: 'test3_score', width: 15 },
+      { header: 'Тест 3: Результат', key: 'test3_result', width: 40 },
+      { header: 'Тест 4: Балл', key: 'test4_score', width: 15 },
+      { header: 'Тест 4: Результат', key: 'test4_result', width: 40 }
+    ];
+
+    // Стили для заголовков
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true, size: 12 };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE6F0FF' }
+    };
+    headerRow.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+    
+    console.log('Adding data rows...');
+    // Добавляем данные и форматируем ячейки
+    results.forEach((result, index) => {
+      const row = worksheet.addRow({
+        id: result.id,
+        first_name: result.first_name,
+        last_name: result.last_name,
+        created_at: new Date(result.created_at).toLocaleString('ru-RU'),
+        total_score: result.total_score,
+        test1_score: result.test1_score,
+        test1_result: result.test1_result,
+        test2_score: result.test2_score,
+        test2_result: result.test2_result,
+        test3_score: result.test3_score,
+        test3_result: result.test3_result,
+        test4_score: result.test4_score,
+        test4_result: result.test4_result
+      });
+
+      // Форматирование строки
+      row.alignment = { vertical: 'middle', wrapText: true };
+      
+      // Чередующиеся цвета строк
+      if (index % 2 === 1) {
+        row.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFF8F8F8' }
+        };
+      }
+
+      // Форматирование числовых ячеек
+      ['total_score', 'test1_score', 'test2_score', 'test3_score', 'test4_score'].forEach(key => {
+        const cell = row.getCell(key);
+        cell.numFmt = '0.00';
+        cell.alignment = { horizontal: 'center' };
+      });
+
+      // Форматирование текстовых ячеек с результатами
+      ['test1_result', 'test2_result', 'test3_result', 'test4_result'].forEach(key => {
+        const cell = row.getCell(key);
+        cell.alignment = { wrapText: true, vertical: 'middle' };
+      });
+    });
+
+    console.log('Adding borders...');
+    // Добавляем границы для всех ячеек
+    worksheet.eachRow((row, rowNumber) => {
+      row.eachCell((cell) => {
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' }
+        };
+      });
+    });
+
+    // Закрепляем заголовок
+    worksheet.views = [
+      { state: 'frozen', xSplit: 0, ySplit: 1, activeCell: 'A2' }
+    ];
+
+    console.log('Generating Excel buffer...');
+    const buffer = await workbook.xlsx.writeBuffer();
+    console.log('Excel buffer generated, size:', buffer.length, 'bytes');
+    return buffer;
+  } catch (error) {
+    console.error('Error in exportToExcel:', error);
+    throw error;
   }
-
-  // Автоподбор ширины колонок
-  worksheet.columns.forEach(column => {
-    column.width = Math.max(column.width || 10, 10);
-  });
-
-  // Возвращаем буфер с Excel файлом
-  return await workbook.xlsx.writeBuffer();
 }
-
-// Environment variables
-const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
-const ADMIN_PASSWORD = 'admin123';
-const JWT_SECRET = 'your-secret-key-here';
 
 // Admin login endpoint
 app.post('/api/admin/login', (req, res) => {
@@ -275,9 +366,9 @@ app.post('/api/admin/login', (req, res) => {
   
   const { password } = req.body;
 
-  if (password === ADMIN_PASSWORD) {
+  if (password === 'admin123') {
     console.log('Login successful');
-    const token = jwt.sign({ role: 'admin' }, JWT_SECRET, { expiresIn: '1h' });
+    const token = jwt.sign({ role: 'admin' }, 'your-secret-key-here', { expiresIn: '1h' });
     res.json({ token });
   } else {
     console.log('Login failed: invalid password');
@@ -298,7 +389,7 @@ function authenticateToken(req, res, next) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  jwt.verify(token, JWT_SECRET, (err, user) => {
+  jwt.verify(token, 'your-secret-key-here', (err, user) => {
     if (err) {
       console.log('Token verification failed:', err.message);
       return res.status(403).json({ error: 'Invalid token' });
@@ -311,10 +402,16 @@ function authenticateToken(req, res, next) {
 
 app.get('/api/questions', (req, res) => {
   try {
+    if (!quizData || !Array.isArray(quizData) || quizData.length === 0) {
+      console.error('Quiz data is not properly loaded');
+      return res.status(500).json({ error: 'Quiz data is not available' });
+    }
+    
+    console.log('Sending quiz data. Number of sections:', quizData.length);
     res.json(quizData);
   } catch (error) {
-    console.error('Error serving quiz data:', error);
-    res.status(500).json({ error: 'Failed to serve quiz data' });
+    console.error('Error sending quiz data:', error);
+    res.status(500).json({ error: 'Failed to retrieve quiz data' });
   }
 });
 
@@ -348,9 +445,9 @@ app.post('/api/results', async (req, res) => {
     }
 
     // Insert detailed answers
-    const insertDetailedAnswer = db.prepare('INSERT INTO detailed_answers (result_id, question_id, answer, is_correct) VALUES (?, ?, ?, ?)');
+    const insertDetailedAnswer = db.prepare('INSERT INTO detailed_answers (result_id, question_id, question_text, answer_text, answer_index, possible_score, score) VALUES (?, ?, ?, ?, ?, ?, ?)');
     for (const answer of detailedAnswers) {
-      insertDetailedAnswer.run(resultId, answer.question_id, answer.answer, answer.is_correct);
+      insertDetailedAnswer.run(resultId, answer.question_id, answer.question_text, answer.answer_text, answer.answer_index, answer.possible_score, answer.score);
     }
 
     res.json({ 
@@ -432,87 +529,113 @@ app.post('/api/admin/init-db-tables', authenticateToken, async (req, res) => {
 // Reinitialize database endpoint
 app.post('/api/admin/reinit-db', authenticateToken, async (req, res) => {
   try {
-    // Drop existing tables
-    db.exec('DROP TABLE IF EXISTS detailed_answers');
-    db.exec('DROP TABLE IF EXISTS section_scores');
-    db.exec('DROP TABLE IF EXISTS quiz_results');
-
-    // Initialize with new schema
-    initializeDatabase();
+    console.log('Reinitializing database...');
     
-    res.json({ message: 'Database reinitialized successfully' });
+    // Close existing connections
+    db.exec('BEGIN TRANSACTION');
+    
+    // Drop existing tables
+    db.exec(`
+      DROP TABLE IF EXISTS detailed_answers;
+      DROP TABLE IF EXISTS section_scores;
+      DROP TABLE IF EXISTS quiz_results;
+    `);
+    
+    // Recreate tables
+    db.exec(`
+      CREATE TABLE quiz_results (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        first_name TEXT,
+        last_name TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        total_score REAL
+      );
+
+      CREATE TABLE section_scores (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        result_id INTEGER,
+        section_number INTEGER,
+        score REAL,
+        FOREIGN KEY (result_id) REFERENCES quiz_results(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE detailed_answers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        result_id INTEGER,
+        question_id INTEGER,
+        question_text TEXT,
+        answer_text TEXT,
+        answer_index INTEGER,
+        possible_score INTEGER,
+        score INTEGER,
+        FOREIGN KEY (result_id) REFERENCES quiz_results(id) ON DELETE CASCADE
+      );
+    `);
+    
+    db.exec('COMMIT');
+    console.log('Database reinitialized successfully');
+    
+    return res.json({ message: 'Database reinitialized successfully' });
   } catch (error) {
     console.error('Error reinitializing database:', error);
-    res.status(500).json({ 
-      error: 'Failed to reinitialize database',
-      details: error.message 
-    });
+    db.exec('ROLLBACK');
+    return res.status(500).json({ error: error.message });
   }
 });
 
-// Сброс базы данных (опасная зона)
-app.post('/api/admin/reset-database', authenticateToken, (req, res) => {
+// Reset database endpoint
+app.post('/api/admin/reset-database', authenticateToken, async (req, res) => {
   try {
-    // Начинаем транзакцию
-    const transaction = db.transaction(() => {
-      // Удаляем все записи из section_scores
-      db.prepare('DELETE FROM section_scores').run();
-      
-      // Удаляем все записи из quiz_results
-      db.prepare('DELETE FROM quiz_results').run();
-      
-      // Сбрасываем автоинкремент
-      db.prepare('DELETE FROM sqlite_sequence WHERE name IN (?, ?)').run('quiz_results', 'section_scores');
-    });
-
-    transaction();
-    res.json({ message: 'Database reset successfully' });
+    console.log('Resetting database...');
+    
+    db.exec('BEGIN TRANSACTION');
+    db.exec('DELETE FROM section_scores');
+    db.exec('DELETE FROM detailed_answers');
+    db.exec('DELETE FROM quiz_results');
+    db.exec('COMMIT');
+    
+    console.log('Database reset successfully');
+    return res.json({ message: 'Database reset successfully' });
   } catch (error) {
     console.error('Error resetting database:', error);
-    res.status(500).json({ error: 'Failed to reset database' });
+    db.exec('ROLLBACK');
+    return res.status(500).json({ error: error.message });
   }
 });
 
 // Delete result endpoint
-app.delete('/api/results/:id', authenticateToken, (req, res) => {
-  console.log('Deleting result with id:', req.params.id);
-  
+app.delete('/api/results/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     
-    // Проверяем существование результата
+    // Check if result exists
     const result = db.prepare('SELECT id FROM quiz_results WHERE id = ?').get(id);
     if (!result) {
-      console.log('Result not found:', id);
       return res.status(404).json({ error: 'Result not found' });
     }
 
-    // Включаем поддержку внешних ключей
+    // Enable foreign key support
     db.pragma('foreign_keys = ON');
 
-    // Удаляем результат (связанные записи удалятся автоматически благодаря ON DELETE CASCADE)
+    // Delete result (related records will be deleted automatically due to ON DELETE CASCADE)
     const deleteStmt = db.prepare('DELETE FROM quiz_results WHERE id = ?');
     const info = deleteStmt.run(id);
-    
-    console.log('Delete operation result:', info);
 
     if (info.changes === 0) {
-      console.log('No rows were deleted');
       return res.status(404).json({ error: 'Result not found' });
     }
 
-    console.log('Successfully deleted result:', id);
-    res.json({ message: 'Result deleted successfully' });
+    return res.json({ message: 'Result deleted successfully' });
   } catch (error) {
     console.error('Error in delete operation:', error);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       error: 'Failed to delete result',
       details: error.message 
     });
   }
 });
 
-app.delete('/api/results', authenticateToken, (req, res) => {
+app.delete('/api/results', authenticateToken, async (req, res) => {
   try {
     db.exec('BEGIN TRANSACTION');
     db.exec('DELETE FROM section_scores');
@@ -520,11 +643,11 @@ app.delete('/api/results', authenticateToken, (req, res) => {
     db.exec('DELETE FROM quiz_results');
     db.exec('COMMIT');
     
-    res.json({ success: true });
+    return res.json({ message: 'All results deleted successfully' });
   } catch (error) {
     db.exec('ROLLBACK');
     console.error('Error deleting all results:', error);
-    res.status(500).json({ success: false, error: error.message });
+    return res.status(500).json({ error: error.message });
   }
 });
 
@@ -571,28 +694,40 @@ function getFilteredResults(from, to, name) {
   }));
 }
 
-app.get('/api/results', authenticateToken, (req, res) => {
+app.get('/api/results', authenticateToken, async (req, res) => {
   try {
     const { from, to, name, format } = req.query;
     const results = getFilteredResults(from, to, name);
 
     if (format === 'csv') {
       const csvData = exportToCSV(results);
-      res.setHeader('Content-Type', 'text/csv');
-      res.setHeader('Content-Disposition', 'attachment; filename=results.csv');
-      res.send(csvData);
-    } else if (format === 'excel') {
-      exportToExcel(results).then(buffer => {
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', 'attachment; filename="test_results.csv"');
+      return res.send(csvData);
+    } 
+    
+    if (format === 'excel') {
+      try {
+        const buffer = await exportToExcel(results);
+        if (!buffer || buffer.length === 0) {
+          throw new Error('Generated Excel buffer is empty');
+        }
+        console.log('Excel buffer size:', buffer.length, 'bytes');
+        
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        res.setHeader('Content-Disposition', 'attachment; filename=results.xlsx');
-        res.send(buffer);
-      });
-    } else {
-      res.json(results);
+        res.setHeader('Content-Disposition', 'attachment; filename="test_results.xlsx"');
+        res.setHeader('Content-Length', buffer.length);
+        return res.end(buffer);
+      } catch (excelError) {
+        console.error('Error generating Excel:', excelError);
+        return res.status(500).json({ error: 'Failed to generate Excel file' });
+      }
     }
+    
+    return res.json(results);
   } catch (error) {
     console.error('Error getting results:', error);
-    res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: error.message });
   }
 });
 
@@ -603,7 +738,7 @@ app.get('/api/results/csv', authenticateToken, async (req, res) => {
     const csvContent = await exportToCSV(results);
 
     res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename=test_results.csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="test_results.csv"');
     res.send(csvContent);
   } catch (error) {
     console.error('Error exporting results:', error);
@@ -618,7 +753,7 @@ app.get('/api/results/excel', authenticateToken, async (req, res) => {
     const excelBuffer = await exportToExcel(results);
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename=test_results.xlsx');
+    res.setHeader('Content-Disposition', 'attachment; filename="test_results.xlsx"');
     res.send(Buffer.from(excelBuffer));
   } catch (error) {
     console.error('Error exporting results:', error);
@@ -664,7 +799,11 @@ process.on('SIGTERM', () => {
   });
 });
 
-const PORT = process.env.PORT || 3002;
+// Start server
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+  // Initialize database when server starts
+  initializeDatabase();
+  console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+  console.log(`CORS enabled for origins: ${allowedOrigins.join(', ')}`);
+  console.log('Database initialized');
 });

@@ -13,7 +13,7 @@ const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await fetch(getApiUrl(API_ENDPOINTS.adminLogin), {
+      const response = await fetch(getApiUrl('ADMIN_LOGIN'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

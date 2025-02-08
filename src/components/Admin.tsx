@@ -11,7 +11,6 @@ interface Result {
   id: number;
   first_name: string;
   last_name: string;
-  completion_date: string;
   created_at: string;
   total_score: number;
   test1_score: number;
@@ -30,8 +29,6 @@ const Admin: React.FC<AdminProps> = ({ onBackToWelcome }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [dateFilter, setDateFilter] = useState({ from: '', to: '' });
   const [nameFilter, setNameFilter] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState<number>(10);
 
   const fetchResults = async () => {
     try {
@@ -43,7 +40,7 @@ const Admin: React.FC<AdminProps> = ({ onBackToWelcome }) => {
       if (nameFilter) queryParams.append('name', nameFilter);
 
       const response = await fetch(
-        `${getApiUrl('/api/results')}?${queryParams.toString()}`,
+        `${getApiUrl('RESULTS')}?${queryParams.toString()}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`
@@ -82,26 +79,38 @@ const Admin: React.FC<AdminProps> = ({ onBackToWelcome }) => {
       }
 
       console.log('Sending delete request for id:', id);
-      const response = await fetch(`${getApiUrl('/api/results')}/${id}`, {
+      const response = await fetch(`${getApiUrl('RESULTS')}/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
+          'Accept': 'application/json'
         }
       });
 
       console.log('Delete response status:', response.status);
-      const data = await response.json();
-      console.log('Delete response data:', data);
-
+      
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) {
           setIsAuthenticated(false);
           localStorage.removeItem('adminToken');
           throw new Error('Необходима авторизация');
         }
-        throw new Error(data.error || 'Не удалось удалить результат');
+
+        const contentType = response.headers.get('content-type');
+        let errorMessage;
+        
+        if (contentType && contentType.includes('application/json')) {
+          const errorData = await response.json();
+          errorMessage = errorData.error || 'Неизвестная ошибка';
+        } else {
+          errorMessage = await response.text();
+        }
+        
+        throw new Error(errorMessage);
       }
+
+      const data = await response.json();
+      console.log('Delete response data:', data);
 
       await fetchResults(); // Обновляем список после удаления
       setError('');
@@ -126,10 +135,14 @@ const Admin: React.FC<AdminProps> = ({ onBackToWelcome }) => {
       queryParams.append('format', format);
 
       const response = await fetch(
-        `${getApiUrl(API_ENDPOINTS.results)}?${queryParams.toString()}`,
+        `${getApiUrl('RESULTS')}?${queryParams.toString()}`,
         {
+          method: 'GET',
           headers: {
-            'Authorization': `Bearer ${token}`
+            'Authorization': `Bearer ${token}`,
+            'Accept': format === 'excel' 
+              ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+              : 'text/csv'
           }
         }
       );
@@ -140,19 +153,48 @@ const Admin: React.FC<AdminProps> = ({ onBackToWelcome }) => {
           localStorage.removeItem('adminToken');
           throw new Error('Необходима авторизация');
         }
-        throw new Error('Не удалось экспортировать результаты');
+
+        const contentType = response.headers.get('content-type');
+        let errorMessage;
+        
+        if (contentType && contentType.includes('application/json')) {
+          const errorData = await response.json();
+          errorMessage = errorData.error || 'Неизвестная ошибка';
+        } else {
+          errorMessage = await response.text();
+        }
+        
+        throw new Error(errorMessage || 'Не удалось экспортировать результаты');
       }
 
       const blob = await response.blob();
+      if (blob.size === 0) {
+        throw new Error('Получен пустой файл');
+      }
+
+      const contentDisposition = response.headers.get('content-disposition');
+      const filename = contentDisposition
+        ? contentDisposition.split('filename=')[1].replace(/"/g, '')
+        : `test_results.${format === 'excel' ? 'xlsx' : format}`;
+
+      // Создаем URL для скачивания
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
+      a.style.display = 'none';
       a.href = url;
-      a.download = `test_results.${format}`;
+      a.download = filename;
+      
+      // Добавляем в DOM, скачиваем и удаляем
       document.body.appendChild(a);
       a.click();
-      a.remove(); // Удаляем элемент сразу после клика
-      setTimeout(() => window.URL.revokeObjectURL(url), 100); // Освобождаем URL с небольшой задержкой
+      
+      // Очищаем ресурсы после задержки
+      setTimeout(() => {
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      }, 100);
     } catch (err) {
+      console.error('Export error:', err);
       setError(err instanceof Error ? err.message : 'Произошла ошибка при экспорте');
     }
   };
@@ -169,20 +211,37 @@ const Admin: React.FC<AdminProps> = ({ onBackToWelcome }) => {
         return;
       }
 
-      const response = await fetch(getApiUrl(API_ENDPOINTS.resetDatabase), {
+      const response = await fetch(getApiUrl('ADMIN_RESET_DB'), {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
           'Content-Type': 'application/json'
         }
       });
 
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          setIsAuthenticated(false);
+          localStorage.removeItem('adminToken');
+          throw new Error('Необходима авторизация');
+        }
+
+        const contentType = response.headers.get('content-type');
+        let errorMessage;
+        
+        if (contentType && contentType.includes('application/json')) {
+          const errorData = await response.json();
+          errorMessage = errorData.error || 'Неизвестная ошибка';
+        } else {
+          errorMessage = await response.text();
+        }
+        
+        throw new Error(errorMessage);
+      }
+
       const data = await response.json();
       console.log('Reset response:', data);
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Не удалось сбросить базу данных');
-      }
 
       await fetchResults();
       setError('');
@@ -204,20 +263,37 @@ const Admin: React.FC<AdminProps> = ({ onBackToWelcome }) => {
         return;
       }
 
-      const response = await fetch(getApiUrl(API_ENDPOINTS.reinitDatabase), {
+      const response = await fetch(getApiUrl('ADMIN_REINIT_DB'), {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
           'Content-Type': 'application/json'
         }
       });
 
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          setIsAuthenticated(false);
+          localStorage.removeItem('adminToken');
+          throw new Error('Необходима авторизация');
+        }
+
+        const contentType = response.headers.get('content-type');
+        let errorMessage;
+        
+        if (contentType && contentType.includes('application/json')) {
+          const errorData = await response.json();
+          errorMessage = errorData.error || 'Неизвестная ошибка';
+        } else {
+          errorMessage = await response.text();
+        }
+        
+        throw new Error(errorMessage);
+      }
+
       const data = await response.json();
       console.log('Reinit response:', data);
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Не удалось реинициализировать базу данных');
-      }
 
       await fetchResults();
       setError('');
@@ -237,16 +313,15 @@ const Admin: React.FC<AdminProps> = ({ onBackToWelcome }) => {
       true;
     
     const matchesDate = (dateFilter.from && dateFilter.to) ?
-      new Date(result.completion_date) >= new Date(dateFilter.from) &&
-      new Date(result.completion_date) <= new Date(dateFilter.to) :
+      new Date(result.created_at) >= new Date(dateFilter.from) &&
+      new Date(result.created_at) <= new Date(dateFilter.to) :
       true;
 
     return matchesName && matchesDate;
   });
 
-  const totalPages = Math.ceil(filteredResults.length / pageSize);
-  const startIndex = (currentPage - 1) * pageSize;
-  const endIndex = startIndex + pageSize;
+  const startIndex = 0;
+  const endIndex = 10;
 
   return (
     <Container className="mt-4">
@@ -290,60 +365,23 @@ const Admin: React.FC<AdminProps> = ({ onBackToWelcome }) => {
             </Col>
           </Row>
           <div className="d-flex justify-content-between align-items-center mb-3">
-            <Form.Group>
-              <Form.Label>Строк на странице</Form.Label>
-              <Form.Select 
-                value={pageSize} 
-                onChange={(e) => {
-                  setPageSize(Number(e.target.value));
-                  setCurrentPage(1); // Сбрасываем на первую страницу при изменении размера
-                }}
-                className="w-auto ms-2"
-              >
-                <option value="10">10</option>
-                <option value="50">50</option>
-                <option value="100">100</option>
-              </Form.Select>
-            </Form.Group>
-
             <div>
               <Button 
-                variant="outline-primary" 
-                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                disabled={currentPage === 1}
+                variant="success" 
+                onClick={() => handleExport('excel')} 
                 className="me-2"
               >
-                &lt; Предыдущая
+                <i className="bi bi-file-excel me-1"></i>
+                Экспорт в Excel
               </Button>
-              <span className="mx-2">
-                Страница {currentPage} из {totalPages}
-              </span>
               <Button 
-                variant="outline-primary" 
-                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                disabled={currentPage === totalPages}
-                className="ms-2"
+                variant="info" 
+                onClick={() => handleExport('csv')}
               >
-                Следующая &gt;
+                <i className="bi bi-file-text me-1"></i>
+                Экспорт в CSV
               </Button>
             </div>
-          </div>
-          <div className="mb-3">
-            <Button 
-              variant="success" 
-              onClick={() => handleExport('excel')} 
-              className="me-2"
-            >
-              <i className="bi bi-file-excel me-1"></i>
-              Экспорт в Excel
-            </Button>
-            <Button 
-              variant="info" 
-              onClick={() => handleExport('csv')}
-            >
-              <i className="bi bi-file-text me-1"></i>
-              Экспорт в CSV
-            </Button>
           </div>
         </Card.Body>
       </Card>
