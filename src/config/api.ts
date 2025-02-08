@@ -1,5 +1,5 @@
 // Environment configuration
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://194.87.69.156:3002';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://194.87.69.156:3000';
 
 // API endpoints
 export const API_ENDPOINTS = {
