@@ -996,6 +996,18 @@ function formatDate(dateStr) {
   });
 }
 
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  try {
+    // Try a simple database query
+    db.prepare('SELECT 1').get();
+    res.json({ status: 'healthy', message: 'Service is running' });
+  } catch (error) {
+    logger.error('Health check failed:', error);
+    res.status(500).json({ status: 'unhealthy', message: error.message });
+  }
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   logger.error('Error:', err.stack);

@@ -7,11 +7,16 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "80:3000"
     depends_on:
       - backend
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   backend:
     build:
@@ -21,18 +26,22 @@ services:
     ports:
       - "3002:3002"
     volumes:
-      - ./server:/usr/src/app
-      - ./server/data:/app/data
-      - backend_node_modules:/usr/src/app/node_modules
+      - quiz_data:/app/data
     environment:
       - NODE_ENV=production
       - PORT=3002
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3002/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 networks:
   app-network:
     driver: bridge
 
 volumes:
-  backend_node_modules:
+  quiz_data:
+    driver: local
