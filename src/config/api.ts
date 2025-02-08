@@ -29,17 +29,20 @@ export const fetchWithCredentials = (url: string, options: RequestInit = {}) => 
 
 // API methods
 export const api = {
-    get: (url: string) => fetchWithCredentials(url),
-    post: (url: string, data: any) => fetchWithCredentials(url, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-    }),
-    delete: (url: string) => fetchWithCredentials(url, {
-        method: 'DELETE',
-    }),
+  get: (url: string) => fetchWithCredentials(url),
+  getWithHeaders: (url: string, headers: HeadersInit) => fetchWithCredentials(url, {
+      headers: headers
+  }),
+  post: (url: string, data: any) => fetchWithCredentials(url, {
+      method: 'POST',
+      headers: {
+          'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+  }),
+  delete: (url: string) => fetchWithCredentials(url, {
+      method: 'DELETE',
+  }),
 };
 
 // Export configuration for reference

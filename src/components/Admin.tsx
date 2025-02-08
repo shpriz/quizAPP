@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Table, Button, Alert, Form, Row, Col, Card } from 'react-bootstrap';
 import AdminLogin from './AdminLogin';
-import { api, getApiUrl, API_ENDPOINTS, fetchWithCredentials } from '../config/api';
+import { api, getApiUrl, API_ENDPOINTS } from '../config/api';
 
 interface AdminProps {
   onBackToWelcome: () => void;
@@ -145,71 +145,77 @@ const Admin: React.FC<AdminProps> = ({ onBackToWelcome }) => {
     }
   };
 
-  const handleExport = async (format: 'csv' | 'excel') => {
-    try {
-      try {
-        const queryParams = new URLSearchParams();
-        if (dateFilter.from) queryParams.append('from', dateFilter.from);
-        if (dateFilter.to) queryParams.append('to', dateFilter.to);
-        if (nameFilter) queryParams.append('name', nameFilter);
-        queryParams.append('format', format);
-    
-        const response = await api.get(
-          `${API_ENDPOINTS.RESULTS}?${queryParams.toString()}`
-        );
+  // const handleExport = async (format: 'csv' | 'excel') => {
+  //   try {
+  //     const queryParams = new URLSearchParams();
+  //     if (dateFilter.from) queryParams.append('from', dateFilter.from);
+  //     if (dateFilter.to) queryParams.append('to', dateFilter.to);
+  //     if (nameFilter) queryParams.append('name', nameFilter);
+  //     queryParams.append('format', format);
   
-      if (!response.ok) {
-        if (response.status === 401 || response.status === 403) {
-          setIsAuthenticated(false);
-          localStorage.removeItem('adminToken');
-          throw new Error('Необходима авторизация');
-        }
+  //     const response = await fetchWithCredentials(
+  //       `${API_ENDPOINTS.RESULTS}?${queryParams.toString()}`,
+  //       {
+  //         headers: {
+  //           'Accept': format === 'excel' 
+  //             ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  //             : 'text/csv'
+  //         }
+  //       }
+  //     );
   
-        const contentType = response.headers.get('content-type');
-        let errorMessage;
+  //     if (!response.ok) {
+  //       if (response.status === 401 || response.status === 403) {
+  //         setIsAuthenticated(false);
+  //         localStorage.removeItem('adminToken');
+  //         throw new Error('Необходима авторизация');
+  //       }
+  
+  //       const contentType = response.headers.get('content-type');
+  //       let errorMessage;
         
-        if (contentType && contentType.includes('application/json')) {
-          const errorData = await response.json();
-          errorMessage = errorData.error || 'Неизвестная ошибка';
-        } else {
-          errorMessage = await response.text();
-        }
+  //       if (contentType && contentType.includes('application/json')) {
+  //         const errorData = await response.json();
+  //         errorMessage = errorData.error || 'Неизвестная ошибка';
+  //       } else {
+  //         errorMessage = await response.text();
+  //       }
         
-        throw new Error(errorMessage || 'Не удалось экспортировать результаты');
-      }
+  //       throw new Error(errorMessage || 'Не удалось экспортировать результаты');
+  //     }
   
-      const blob = await response.blob();
-      if (blob.size === 0) {
-        throw new Error('Получен пустой файл');
-      }
+  //     const blob = await response.blob();
+  //     if (blob.size === 0) {
+  //       throw new Error('Получен пустой файл');
+  //     }
   
-      const contentDisposition = response.headers.get('content-disposition');
-      const filename = contentDisposition
-        ? contentDisposition.split('filename=')[1].replace(/"/g, '')
-        : `test_results.${format === 'excel' ? 'xlsx' : format}`;
+  //     const contentDisposition = response.headers.get('content-disposition');
+  //     const filename = contentDisposition
+  //       ? contentDisposition.split('filename=')[1].replace(/"/g, '')
+  //       : `test_results.${format === 'excel' ? 'xlsx' : format}`;
   
-      // Create download URL
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.style.display = 'none';
-      a.href = url;
-      a.download = filename;
+  //     // Create download URL
+  //     const url = window.URL.createObjectURL(blob);
+  //     const a = document.createElement('a');
+  //     a.style.display = 'none';
+  //     a.href = url;
+  //     a.download = filename;
       
-      // Add to DOM, trigger download and cleanup
-      document.body.appendChild(a);
-      a.click();
+  //     // Add to DOM, trigger download and cleanup
+  //     document.body.appendChild(a);
+  //     a.click();
       
-      setTimeout(() => {
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-      }, 100);
+  //     setTimeout(() => {
+  //       document.body.removeChild(a);
+  //       window.URL.revokeObjectURL(url);
+  //     }, 100);
   
-      setError('');
-    } catch (err: any) {
-      console.error('Export error:', err);
-      setError(err instanceof Error ? err.message : 'Произошла ошибка при экспорте');
-    }
-  };
+  //     setError('');
+  //   } catch (err: any) {
+  //     console.error('Export error:', err);
+  //     setError(err instanceof Error ? err.message : 'Произошла ошибка при экспорте');
+  //   }
+  // };
 
 
   // const handleExport = async (format: 'csv' | 'excel') => {
@@ -343,7 +349,73 @@ const Admin: React.FC<AdminProps> = ({ onBackToWelcome }) => {
   //   }
   // };
 
+  const handleExport = async (format: 'csv' | 'excel') => {
+    try {
+        const queryParams = new URLSearchParams();
+        if (dateFilter.from) queryParams.append('from', dateFilter.from);
+        if (dateFilter.to) queryParams.append('to', dateFilter.to);
+        if (nameFilter) queryParams.append('name', nameFilter);
+        queryParams.append('format', format);
 
+        const response = await api.getWithHeaders(
+            `${API_ENDPOINTS.RESULTS}?${queryParams.toString()}`,
+            {
+                'Accept': format === 'excel' 
+                    ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                    : 'text/csv'
+            }
+        );
+
+        if (!response.ok) {
+            if (response.status === 401 || response.status === 403) {
+                setIsAuthenticated(false);
+                localStorage.removeItem('adminToken');
+                throw new Error('Необходима авторизация');
+            }
+
+            const contentType = response.headers.get('content-type');
+            let errorMessage;
+            
+            if (contentType && contentType.includes('application/json')) {
+                const errorData = await response.json();
+                errorMessage = errorData.error || 'Неизвестная ошибка';
+            } else {
+                errorMessage = await response.text();
+            }
+            
+            throw new Error(errorMessage || 'Не удалось экспортировать результаты');
+        }
+
+        const blob = await response.blob();
+        if (blob.size === 0) {
+            throw new Error('Получен пустой файл');
+        }
+
+        const contentDisposition = response.headers.get('content-disposition');
+        const filename = contentDisposition
+            ? contentDisposition.split('filename=')[1].replace(/"/g, '')
+            : `test_results.${format === 'excel' ? 'xlsx' : format}`;
+
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = filename;
+        
+        document.body.appendChild(a);
+        a.click();
+        
+        setTimeout(() => {
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        }, 100);
+
+        setError('');
+    } catch (err: any) {
+        console.error('Export error:', err);
+        setError(err instanceof Error ? err.message : 'Произошла ошибка при экспорте');
+    }
+};
 
 
   const handleResetDatabase = async () => {
