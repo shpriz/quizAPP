@@ -40,17 +40,10 @@ const CONFIG = {
 const currentConfig = isDevelopment ? CONFIG.development : CONFIG.production;
 
 // CORS configuration
-const allowedOrigins = currentConfig.allowedOrigins;
-
 app.use(cors({
-  origin: function(origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
+  origin: ['http://194.87.69.156:3000', 'http://stomtest.nsmu.ru:3000', 'http://localhost:3000'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 }));
 
@@ -1050,5 +1043,5 @@ process.on('SIGTERM', () => {
 // Start server
 const server = app.listen(PORT, () => {
   logger.info(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
-  logger.info(`CORS enabled for origins: ${allowedOrigins.join(', ')}`);
+  logger.info(`CORS enabled for origins: ${currentConfig.allowedOrigins.join(', ')}`);
 });
