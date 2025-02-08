@@ -41,7 +41,10 @@ const currentConfig = isDevelopment ? CONFIG.development : CONFIG.production;
 
 // CORS configuration
 app.use(cors({
-  origin: ['http://194.87.69.156:3000', 'http://stomtest.nsmu.ru:3000', 'http://localhost:3000'],
+  origin: function(origin, callback) {
+    const allowedOrigins = ['http://194.87.69.156:3000', 'http://194.87.69.156:3002'];
+    callback(null, allowedOrigins.includes(origin) ? origin : allowedOrigins[0]);
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
