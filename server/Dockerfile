@@ -1,15 +1,11 @@
-FROM node:20.11.0-bullseye
+# Use Node.js Alpine image
+FROM node:20-alpine
 
+# Set working directory
 WORKDIR /app
 
-# Install build dependencies
-RUN apt-get update && \
-    apt-get install -y \
-    python3 \
-    make \
-    g++ \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+# Install system dependencies
+RUN apk add --no-cache python3 make g++ curl
 
 # Copy package files
 COPY package*.json ./
@@ -17,17 +13,18 @@ COPY package*.json ./
 # Install dependencies
 RUN npm install --omit=dev
 
-# Copy all files
+# Copy application code
 COPY . .
 
-# Create directories and set permissions
+# Create data and logs directories and set permissions
 RUN mkdir -p /app/data /app/logs && \
     chown -R node:node /app
 
-# Switch to node user
+# Switch to non-root user
 USER node
 
-# Expose ports
+# Expose port
 EXPOSE 3002
 
+# Start the application
 CMD ["node", "server.js"]

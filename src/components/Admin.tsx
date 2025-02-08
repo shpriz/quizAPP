@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Table, Button, Alert, Form, Row, Col, Card } from 'react-bootstrap';
 import AdminLogin from './AdminLogin';
-import { getApiUrl, API_ENDPOINTS } from '../config/api';
+import { getApiUrl } from '../config/api';
 
 interface AdminProps {
   onBackToWelcome: () => void;

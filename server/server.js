@@ -55,7 +55,7 @@ app.use(requestLogger);  // Add request logging middleware
 
 // Логирование всех запросов (только в development)
 if (isDevelopment) {
-  app.use((req, res, next) => {
+  app.use((req, next) => {
     logger.info(`${new Date().toISOString()} ${req.method} ${req.url}`);
     next();
   });

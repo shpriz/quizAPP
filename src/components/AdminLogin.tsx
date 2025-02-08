@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Container, Card, Form, Button, Alert } from 'react-bootstrap';
-import { API_ENDPOINTS, getApiUrl } from '../config/api';
+import { getApiUrl } from '../config/api';
 
 interface AdminLoginProps {
   onLogin: (success: boolean) => void;

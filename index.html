@@ -5,40 +5,7 @@
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Тестирование</title>
-    <script>
-      (function() {
-        try {
-          // Check if crypto is already available
-          if (typeof window.crypto === 'undefined') {
-            window.crypto = {};
-          }
-          
-          // Add getRandomValues if needed
-          if (!window.crypto.getRandomValues) {
-            window.crypto.getRandomValues = function(array) {
-              for (let i = 0; i < array.length; i++) {
-                array[i] = Math.floor(Math.random() * 256);
-              }
-              return array;
-            };
-          }
-
-          // Add randomUUID if needed
-          if (!window.crypto.randomUUID) {
-            window.crypto.randomUUID = function() {
-              return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-                const r = window.crypto.getRandomValues(new Uint8Array(1))[0] & 15;
-                const v = c === 'x' ? r : (r & 0x3 | 0x8);
-                return v.toString(16);
-              });
-            };
-          }
-        } catch (e) {
-          console.warn('Crypto polyfill failed:', e);
-        }
-      })();
-    </script>
-  </head>
+   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
