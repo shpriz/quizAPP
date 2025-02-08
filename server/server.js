@@ -27,28 +27,37 @@ const CONFIG = {
   }
 };
 
-// Get current configuration
-const currentConfig = isDevelopment ? CONFIG.development : CONFIG.production;
+// Configuration
+const currentConfig = {
+  allowedOrigins: [
+      'http://localhost:3000',
+      'http://194.87.69.156:3000',
+      'http://194.87.69.156:3002',
+      'http://194.87.69.156'
+  ],
+  port: process.env.PORT || 3002,
+  dbUrl: process.env.MONGODB_URI || 'mongodb://localhost:27017/quiz_db'
+};
 
 // CORS configuration
 app.use(cors({
-  origin: function(origin, callback) {
-    if (!origin || currentConfig.allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: [
-    'Content-Type', 
-    'Authorization', 
-    'X-Requested-With',
-    'Accept',
-    'Origin'
-  ],
-  credentials: true, 
-  maxAge: 86400 // 24 hours
+origin: function(origin, callback) {
+  if (!origin || currentConfig.allowedOrigins.includes(origin)) {
+    callback(null, true);
+  } else {
+    callback(new Error('Not allowed by CORS'));
+  }
+},
+methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+allowedHeaders: [
+  'Content-Type', 
+  'Authorization', 
+  'X-Requested-With',
+  'Accept',
+  'Origin'
+],
+credentials: true, 
+maxAge: 86400 // 24 hours
 }));
 
 // Enable pre-flight requests for all routes

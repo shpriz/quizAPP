@@ -18,14 +18,16 @@ export function getApiUrl(endpoint: keyof typeof API_ENDPOINTS): string {
 // Fetch wrapper with credentials
 export const fetchWithCredentials = (url: string, options: RequestInit = {}) => {
   const token = localStorage.getItem('adminToken');
+  const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+      'Authorization': token ? `Bearer ${token}` : '',
+      ...options.headers,
+  };
+
   return fetch(url, {
       ...options,
-      credentials: 'include',
-      headers: {
-          'Content-Type': 'application/json',
-          'Authorization': token ? `Bearer ${token}` : '',
-          ...options.headers,
-      },
+      credentials: 'include', // This is important for CORS with credentials
+      headers: headers,
   });
 };
 
