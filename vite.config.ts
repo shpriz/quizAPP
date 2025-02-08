@@ -27,10 +27,14 @@ export default defineConfig(({ mode }) => ({
 
   // Настройки сервера разработки
   server: {
-    allowedHosts: ['stomtest.nsmu.ru', '194.87.69.156', 'localhost'],
-    host: true,
     port: 3000,
-    strictPort: true,
+    host: true,
+    cors: {
+      origin: 'http://194.87.69.156:3000',
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization'],
+      credentials: true
+    },
     proxy: {
       '/api': {
         target: 'http://backend:3002',
