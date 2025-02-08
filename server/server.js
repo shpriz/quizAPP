@@ -27,6 +27,7 @@ const CONFIG = {
   }
 };
 
+
 // Configuration
 const currentConfig = {
   allowedOrigins: [
@@ -41,23 +42,23 @@ const currentConfig = {
 
 // CORS configuration
 app.use(cors({
-origin: function(origin, callback) {
-  if (!origin || currentConfig.allowedOrigins.includes(origin)) {
-    callback(null, true);
-  } else {
-    callback(new Error('Not allowed by CORS'));
-  }
-},
-methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-allowedHeaders: [
-  'Content-Type', 
-  'Authorization', 
-  'X-Requested-With',
-  'Accept',
-  'Origin'
-],
-credentials: true, 
-maxAge: 86400 // 24 hours
+  origin: function(origin, callback) {
+    if (!origin || currentConfig.allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'X-Requested-With',
+    'Accept',
+    'Origin'
+  ],
+  credentials: true, 
+  maxAge: 86400
 }));
 
 // Enable pre-flight requests for all routes
