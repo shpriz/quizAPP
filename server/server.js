@@ -19,6 +19,7 @@ const CONFIG = {
     allowedOrigins: [
       'http://localhost:3000',
       'http://194.87.69.156:3000',
+      'http://stomtest.nsmu.ru:3000'
     ],
     databasePath: path.join(__dirname, 'data', 'quiz-data.json'),
     verbose: true
@@ -26,9 +27,9 @@ const CONFIG = {
   production: {
     allowedOrigins: [
       'http://stomtest.nsmu.ru', 
-      'http://localhost:3000', 
+      'http://stomtest.nsmu.ru:3000',
+      'http://localhost:3000',
       'http://194.87.69.156:3000'
-
     ],
     databasePath: path.join(__dirname, 'data', 'quiz-data.json'),
     verbose: false
@@ -555,7 +556,7 @@ app.post('/api/admin/login', (req, res) => {
 
   if (password === 'admin123') {
     logger.info('Login successful');
-    const token = jwt.sign({ role: 'admin' }, 'ciun[oub[o_ji8_h=8y=9u6777=7_=v-yc=v76-h87uvf0==98u=bub]09iiy', { expiresIn: '1h' });
+    const token = jwt.sign({ role: 'admin' }, '7683968aed78db52866fb4f4174fedd2d13cbb34da4075f07bbc03bf05768ce4', { expiresIn: '1h' });
     res.json({ token });
   } else {
     logger.info('Login failed: invalid password');
@@ -576,7 +577,7 @@ function authenticateToken(req, res, next) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  jwt.verify(token, 'ciun[oub[o_ji8_h=8y=9u6777=7_=v-yc=v76-h87uvf0==98u=bub]09iiy', (err, user) => {
+  jwt.verify(token, '7683968aed78db52866fb4f4174fedd2d13cbb34da4075f07bbc03bf05768ce4', (err, user) => {
     if (err) {
       logger.info('Token verification failed:', err.message);
       return res.status(403).json({ error: 'Invalid token' });
