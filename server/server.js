@@ -16,21 +16,12 @@ const PORT = process.env.PORT || 3002;
 // Development and Production configurations
 const CONFIG = {
   development: {
-    allowedOrigins: [
-      'http://localhost:3000',
-      'http://194.87.69.156:3000',
-      'http://stomtest.nsmu.ru:3000'
-    ],
+    allowedOrigins: ['http://194.87.69.156:3000'],
     databasePath: path.join(__dirname, 'data', 'quiz-data.json'),
     verbose: true
   },
   production: {
-    allowedOrigins: [
-      'http://stomtest.nsmu.ru', 
-      'http://stomtest.nsmu.ru:3000',
-      'http://localhost:3000',
-      'http://194.87.69.156:3000'
-    ],
+    allowedOrigins: ['http://194.87.69.156:3000'],
     databasePath: path.join(__dirname, 'data', 'quiz-data.json'),
     verbose: false
   }
@@ -42,8 +33,11 @@ const currentConfig = isDevelopment ? CONFIG.development : CONFIG.production;
 // CORS configuration
 app.use(cors({
   origin: function(origin, callback) {
-    const allowedOrigins = ['http://194.87.69.156:3000', 'http://194.87.69.156:3002'];
-    callback(null, allowedOrigins.includes(origin) ? origin : allowedOrigins[0]);
+    if (!origin || currentConfig.allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
