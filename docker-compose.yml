@@ -13,12 +13,12 @@ services:
         condition: service_healthy
     networks:
       app-network:
-        ipv4_address:  172.16.0.176
+        ipv4_address: 172.16.0.2
     hostname: stomtest.nsmu.ru
     environment:
-      - VITE_API_URL=${VITE_API_URL:-http://backend:3002/api}
+      - VITE_API_URL=${VITE_API_URL:-http://stomtest.nsmu.ru:3002/api}
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://frontend:3000"]
+      test: ["CMD", "wget", "--spider", "-q", "http://stomtest.nsmu.ru:3000"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -39,10 +39,10 @@ services:
       - JWT_SECRET=${JWT_SECRET:-your-secret-key}
     networks:
       app-network:
-        ipv4_address:  172.16.0.176
+        ipv4_address: 172.16.0.3
     hostname: stomtest.nsmu.ru
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3002/api/health"]
+      test: ["CMD", "curl", "-f", "http://stomtest.nsmu.ru:3002/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -52,7 +52,8 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.19.0.0/16
+        - subnet: 172.16.0.0/16
+          gateway: 172.16.0.1
 
 volumes:
   quiz_data:
