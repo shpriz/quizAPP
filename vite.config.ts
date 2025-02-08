@@ -27,10 +27,10 @@ export default defineConfig(({ mode }) => ({
 
   // Настройки сервера разработки
   server: {
-    port: 3000,
+    port: 5173,
     host: true,
     cors: {
-      origin: 'http://194.87.69.156:3000',
+      origin: 'http://stomtest.nsmu.ru:5173',
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization'],
       credentials: true
@@ -39,7 +39,7 @@ export default defineConfig(({ mode }) => ({
       '/api': {
         target: 'http://backend:3002',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, '')
+        secure: false
       }
     }
   },
