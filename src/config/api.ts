@@ -3,11 +3,11 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://194.87.69.156:3002'
 
 // API endpoints
 export const API_ENDPOINTS = {
-    QUESTIONS: '/questions',
-    RESULTS: '/results',
-    ADMIN_LOGIN: '/admin/login',
-    ADMIN_RESET_DB: '/admin/reset-database',
-    ADMIN_REINIT_DB: '/admin/reinit-db'
+    QUESTIONS: '/api/questions',
+    RESULTS: '/api/results',
+    ADMIN_LOGIN: '/api/admin/login',
+    ADMIN_RESET_DB: '/api/admin/reset-database',
+    ADMIN_REINIT_DB: '/api/admin/reinit-db'
 } as const;
 
 // Helper function to get full API URL
