@@ -7,11 +7,13 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      - "80:3000"
+      - "80:3000"  # Map host port 80 to container port 3000
     depends_on:
       - backend
     networks:
       - app-network
+    environment:
+      - VITE_API_URL=http://stomtest.nsmu.ru/api
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000"]
       interval: 30s
@@ -31,6 +33,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3002
+      - JWT_SECRET=${JWT_SECRET:-your-secret-key}  # Use environment variable or default
     networks:
       - app-network
     healthcheck:
