@@ -26,6 +26,6 @@ export function getApiUrl(endpoint: keyof typeof API_ENDPOINTS): string {
 export const CONFIG = {
     isDevelopment,
     apiBaseUrl: API_BASE_URL,
-    frontendPort: isDevelopment ? 3000 : 80,
+    frontendPort: isDevelopment ? 5173 : 3000,
     backendPort: 3002
 };
