@@ -15,7 +15,7 @@ services:
         ipv4_address: 172.16.0.2
     hostname: stomtest.nsmu.ru
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://stomtest.nsmu.ru:5173"]
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:5173"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -40,7 +40,7 @@ services:
         ipv4_address: 172.16.0.3
     hostname: stomtest.nsmu.ru
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://stomtest.nsmu.ru:3002/health"]
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3002/api"]
       interval: 30s
       timeout: 10s
       retries: 3
