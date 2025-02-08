@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   frontend:
     build:
@@ -10,11 +12,13 @@ services:
       backend:
         condition: service_healthy
     networks:
-      - app-network
+      app-network:
+        ipv4_address:  172.16.0.176
+    hostname: stomtest.nsmu.ru
     environment:
-      - VITE_API_URL=${VITE_API_URL:-http://localhost:3002/api}
+      - VITE_API_URL=${VITE_API_URL:-http://backend:3002/api}
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000"]
+      test: ["CMD", "wget", "--spider", "-q", "http://frontend:3000"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -34,7 +38,9 @@ services:
       - PORT=3002
       - JWT_SECRET=${JWT_SECRET:-your-secret-key}
     networks:
-      - app-network
+      app-network:
+        ipv4_address:  172.16.0.176
+    hostname: stomtest.nsmu.ru
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3002/api/health"]
       interval: 30s
@@ -44,6 +50,9 @@ services:
 networks:
   app-network:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.19.0.0/16
 
 volumes:
   quiz_data:
