@@ -18,7 +18,7 @@ FROM node:18-alpine
 WORKDIR /app
 
 # Create app directory and set permissions
-RUN mkdir -p /app/data && chown -R node:node /app
+RUN mkdir -p /app/data /app/logs && chown -R node:node /app
 
 # Switch to non-root user
 USER node
@@ -27,9 +27,10 @@ USER node
 COPY --from=builder --chown=node:node /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/package*.json ./
 COPY --from=builder --chown=node:node /app/server.js ./
+COPY --from=builder --chown=node:node /app/logger.js ./
 
-# Create volume for persistent data
-VOLUME ["/app/data"]
+# Create volumes for persistent data and logs
+VOLUME ["/app/data", "/app/logs"]
 
 # Expose port 3002
 EXPOSE 3002
