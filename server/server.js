@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const jwt = require('jsonwebtoken');
 const ExcelJS = require('exceljs');
+const { logger, requestLogger } = require('./logger');
 
 const app = express();
 
@@ -56,11 +57,12 @@ app.use(cors({
 app.options('*', cors());
 
 app.use(express.json());
+app.use(requestLogger);  // Add request logging middleware
 
 // Логирование всех запросов (только в development)
 if (isDevelopment) {
   app.use((req, res, next) => {
-    console.log(`${new Date().toISOString()} ${req.method} ${req.url}`);
+    logger.info(`${new Date().toISOString()} ${req.method} ${req.url}`);
     next();
   });
 }
@@ -69,22 +71,22 @@ if (isDevelopment) {
 let quizData;
 try {
   const quizDataPath = currentConfig.databasePath;
-  console.log('Loading quiz data from:', quizDataPath);
+  logger.info('Loading quiz data from:', quizDataPath);
   
   if (!fs.existsSync(quizDataPath)) {
-    console.error('Quiz data file not found:', quizDataPath);
+    logger.error('Quiz data file not found:', quizDataPath);
     throw new Error('Quiz data file not found');
   }
   
   const fileContent = fs.readFileSync(quizDataPath, 'utf8');
   if (isDevelopment) {
-    console.log('Quiz data file content length:', fileContent.length);
+    logger.info('Quiz data file content length:', fileContent.length);
   }
   
   quizData = JSON.parse(fileContent);
-  console.log('Quiz data loaded successfully. Number of sections:', quizData.length);
+  logger.info('Quiz data loaded successfully. Number of sections:', quizData.length);
 } catch (error) {
-  console.error('Error loading quiz data:', error);
+  logger.error('Error loading quiz data:', error);
   quizData = [];
 }
 
@@ -139,9 +141,9 @@ function initializeDatabase() {
         FOREIGN KEY (result_id) REFERENCES quiz_results(id) ON DELETE CASCADE
       );
     `);
-    console.log('Database tables created successfully');
+    logger.info('Database tables created successfully');
   } catch (error) {
-    console.error('Error initializing database:', error);
+    logger.error('Error initializing database:', error);
     throw error;
   }
 }
@@ -149,11 +151,11 @@ function initializeDatabase() {
 // Initialize database tables - only called from admin panel
 async function initializeDatabaseTables() {
   try {
-    console.log('Reinitializing database...');
+    logger.info('Reinitializing database...');
     initializeDatabase();
-    console.log('Database tables recreated successfully');
+    logger.info('Database tables recreated successfully');
   } catch (error) {
-    console.error('Error initializing database:', error);
+    logger.error('Error initializing database:', error);
   }
 }
 
@@ -349,7 +351,7 @@ async function exportToCSV(results) {
 
 async function exportToExcel(results) {
   try {
-    console.log('Starting Excel export with', results.length, 'results');
+    logger.info('Starting Excel export with', results.length, 'results');
     
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'StomatQuiz';
@@ -418,7 +420,7 @@ async function exportToExcel(results) {
         if (!answersByBlock[blockNumber][questionInBlock]) {
           answersByBlock[blockNumber][questionInBlock] = answer;
         }
-        console.log(`Answer ${answer.question_id} -> Block ${blockNumber}, Question ${questionInBlock}`);
+        logger.info(`Answer ${answer.question_id} -> Block ${blockNumber}, Question ${questionInBlock}`);
       });
 
       // Prepare row data
@@ -498,52 +500,52 @@ async function exportToExcel(results) {
       }
     ];
 
-    console.log('Generating Excel buffer...');
+    logger.info('Generating Excel buffer...');
     const buffer = await workbook.xlsx.writeBuffer();
-    console.log('Excel buffer generated, size:', buffer.length, 'bytes');
+    logger.info('Excel buffer generated, size:', buffer.length, 'bytes');
     return buffer;
   } catch (error) {
-    console.error('Error in exportToExcel:', error);
+    logger.error('Error in exportToExcel:', error);
     throw error;
   }
 }
 
 // Admin login endpoint
 app.post('/api/admin/login', (req, res) => {
-  console.log('Login attempt:', req.body);
-  console.log('Headers:', req.headers);
+  logger.info('Login attempt:', req.body);
+  logger.info('Headers:', req.headers);
   
   const { password } = req.body;
 
   if (password === 'admin123') {
-    console.log('Login successful');
+    logger.info('Login successful');
     const token = jwt.sign({ role: 'admin' }, 'your-secret-key-here', { expiresIn: '1h' });
     res.json({ token });
   } else {
-    console.log('Login failed: invalid password');
+    logger.info('Login failed: invalid password');
     res.status(401).json({ error: 'Invalid password' });
   }
 });
 
 // Middleware to authenticate token
 function authenticateToken(req, res, next) {
-  console.log('Authenticating request to:', req.path);
-  console.log('Auth headers:', req.headers.authorization);
+  logger.info('Authenticating request to:', req.path);
+  logger.info('Auth headers:', req.headers.authorization);
   
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
   if (!token) {
-    console.log('No token provided');
+    logger.info('No token provided');
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
   jwt.verify(token, 'your-secret-key-here', (err, user) => {
     if (err) {
-      console.log('Token verification failed:', err.message);
+      logger.info('Token verification failed:', err.message);
       return res.status(403).json({ error: 'Invalid token' });
     }
-    console.log('Token verified for user:', user);
+    logger.info('Token verified for user:', user);
     req.user = user;
     next();
   });
@@ -552,21 +554,21 @@ function authenticateToken(req, res, next) {
 app.get('/api/questions', (req, res) => {
   try {
     if (!quizData || !Array.isArray(quizData) || quizData.length === 0) {
-      console.error('Quiz data is not properly loaded');
+      logger.error('Quiz data is not properly loaded');
       return res.status(500).json({ error: 'Quiz data is not available' });
     }
     
-    console.log('Sending quiz data. Number of sections:', quizData.length);
+    logger.info('Sending quiz data. Number of sections:', quizData.length);
     res.json(quizData);
   } catch (error) {
-    console.error('Error sending quiz data:', error);
+    logger.error('Error sending quiz data:', error);
     res.status(500).json({ error: 'Failed to retrieve quiz data' });
   }
 });
 
 app.post('/api/results', async (req, res) => {
   const { firstName, lastName, sectionScores, totalScore, detailedAnswers } = req.body;
-  console.log('Saving results:', { 
+  logger.info('Saving results:', { 
     firstName, 
     lastName, 
     totalScore, 
@@ -596,16 +598,16 @@ app.post('/api/results', async (req, res) => {
       if (Array.isArray(sectionScores)) {
         sectionScores.forEach((section, index) => {
           if (!section || typeof section.score !== 'number') {
-            console.warn('Invalid section score:', section);
+            logger.warn('Invalid section score:', section);
             return;
           }
           const sectionNumber = index + 1;
           const sectionName = `Блок ${sectionNumber}`;
-          console.log('Saving section score:', { sectionName, score: section.score });
+          logger.info('Saving section score:', { sectionName, score: section.score });
           sectionScoreStmt.run(resultId, sectionName, section.score);
         });
       } else {
-        console.warn('sectionScores is not an array:', sectionScores);
+        logger.warn('sectionScores is not an array:', sectionScores);
       }
 
       // Insert detailed answers
@@ -620,11 +622,11 @@ app.post('/api/results', async (req, res) => {
 
         detailedAnswers.forEach(answer => {
           if (!answer) {
-            console.warn('Invalid answer:', answer);
+            logger.warn('Invalid answer:', answer);
             return;
           }
 
-          console.log('Saving answer:', {
+          logger.info('Saving answer:', {
             questionId: answer.question_id,
             question: answer.question_text,
             answer: answer.answer_text,
@@ -642,23 +644,23 @@ app.post('/api/results', async (req, res) => {
           );
         });
       } else {
-        console.warn('No detailed answers provided:', detailedAnswers);
+        logger.warn('No detailed answers provided:', detailedAnswers);
       }
 
       db.exec('COMMIT');
-      console.log('Results saved successfully');
+      logger.info('Results saved successfully');
       res.json({ 
         success: true, 
         message: 'Results saved successfully',
         resultId: resultId
       });
     } catch (error) {
-      console.error('Error in transaction:', error);
+      logger.error('Error in transaction:', error);
       db.exec('ROLLBACK');
       throw error;
     }
   } catch (error) {
-    console.error('Error saving results:', error);
+    logger.error('Error saving results:', error);
     res.status(500).json({ error: 'Failed to save results', details: error.message });
   }
 });
@@ -700,7 +702,7 @@ function getFilteredResults(from, to, name) {
     }
     query += ` GROUP BY r.id ORDER BY r.created_at DESC`;
 
-    console.log('Running query:', query, 'with params:', params);
+    logger.info('Running query:', query, 'with params:', params);
     const results = db.prepare(query).all(...params);
     
     return results.map(result => {
@@ -744,7 +746,7 @@ function getFilteredResults(from, to, name) {
       };
     });
   } catch (error) {
-    console.error('Error in getFilteredResults:', error);
+    logger.error('Error in getFilteredResults:', error);
     throw error;
   }
 }
@@ -752,13 +754,13 @@ function getFilteredResults(from, to, name) {
 app.get('/api/results', authenticateToken, async (req, res) => {
   try {
     const { from, to, name, format } = req.query;
-    console.log('Getting results with params:', { from, to, name, format });
+    logger.info('Getting results with params:', { from, to, name, format });
     
     const results = getFilteredResults(from, to, name);
-    console.log(`Found ${results.length} results`);
+    logger.info(`Found ${results.length} results`);
 
     if (format === 'csv') {
-      const csvContent = exportToCSV(results);
+      const csvContent = await exportToCSV(results);
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename=results.csv');
       return res.send(csvContent);
@@ -771,7 +773,7 @@ app.get('/api/results', authenticateToken, async (req, res) => {
 
     res.json(results);
   } catch (error) {
-    console.error('Error getting results:', error);
+    logger.error('Error getting results:', error);
     res.status(500).json({ error: 'Failed to get results', details: error.message });
   }
 });
@@ -786,7 +788,7 @@ app.get('/api/results/csv', authenticateToken, async (req, res) => {
     res.setHeader('Content-Disposition', 'attachment; filename="test_results.csv"');
     res.send(csvContent);
   } catch (error) {
-    console.error('Error exporting results:', error);
+    logger.error('Error exporting results:', error);
     res.status(500).json({ error: 'Failed to export results' });
   }
 });
@@ -801,7 +803,7 @@ app.get('/api/results/excel', authenticateToken, async (req, res) => {
     res.setHeader('Content-Disposition', 'attachment; filename="test_results.xlsx"');
     res.send(Buffer.from(excelBuffer));
   } catch (error) {
-    console.error('Error exporting results:', error);
+    logger.error('Error exporting results:', error);
     res.status(500).json({ error: 'Failed to export results' });
   }
 });
@@ -812,7 +814,7 @@ app.post('/api/admin/init-db', authenticateToken, async (req, res) => {
     await initializeDatabase();
     res.json({ success: true, message: 'Database initialized successfully' });
   } catch (error) {
-    console.error('Error initializing database:', error);
+    logger.error('Error initializing database:', error);
     res.status(500).json({ error: 'Failed to initialize database' });
   }
 });
@@ -823,7 +825,7 @@ app.post('/api/admin/init-db-tables', authenticateToken, async (req, res) => {
     await initializeDatabaseTables();
     res.json({ success: true, message: 'Database tables initialized successfully' });
   } catch (error) {
-    console.error('Error initializing database tables:', error);
+    logger.error('Error initializing database tables:', error);
     res.status(500).json({ error: 'Failed to initialize database tables' });
   }
 });
@@ -831,7 +833,7 @@ app.post('/api/admin/init-db-tables', authenticateToken, async (req, res) => {
 // Reinitialize database endpoint
 app.post('/api/admin/reinit-db', authenticateToken, async (req, res) => {
   try {
-    console.log('Reinitializing database...');
+    logger.info('Reinitializing database...');
     
     // Start transaction
     db.exec('BEGIN TRANSACTION');
@@ -877,7 +879,7 @@ app.post('/api/admin/reinit-db', authenticateToken, async (req, res) => {
 
       // Commit transaction
       db.exec('COMMIT');
-      console.log('Database reinitialized successfully');
+      logger.info('Database reinitialized successfully');
       res.json({ success: true, message: 'Database reinitialized successfully' });
     } catch (error) {
       // Rollback on error
@@ -885,7 +887,7 @@ app.post('/api/admin/reinit-db', authenticateToken, async (req, res) => {
       throw error;
     }
   } catch (error) {
-    console.error('Error reinitializing database:', error);
+    logger.error('Error reinitializing database:', error);
     res.status(500).json({ error: 'Failed to reinitialize database' });
   }
 });
@@ -893,7 +895,7 @@ app.post('/api/admin/reinit-db', authenticateToken, async (req, res) => {
 // Reset database endpoint
 app.post('/api/admin/reset-database', authenticateToken, async (req, res) => {
   try {
-    console.log('Resetting database...');
+    logger.info('Resetting database...');
     
     db.exec('BEGIN TRANSACTION');
     db.exec('DELETE FROM section_scores');
@@ -901,10 +903,10 @@ app.post('/api/admin/reset-database', authenticateToken, async (req, res) => {
     db.exec('DELETE FROM quiz_results');
     db.exec('COMMIT');
     
-    console.log('Database reset successfully');
+    logger.info('Database reset successfully');
     return res.json({ message: 'Database reset successfully' });
   } catch (error) {
-    console.error('Error resetting database:', error);
+    logger.error('Error resetting database:', error);
     db.exec('ROLLBACK');
     return res.status(500).json({ error: error.message });
   }
@@ -934,7 +936,7 @@ app.delete('/api/results/:id', authenticateToken, async (req, res) => {
 
     return res.json({ message: 'Result deleted successfully' });
   } catch (error) {
-    console.error('Error in delete operation:', error);
+    logger.error('Error in delete operation:', error);
     return res.status(500).json({ 
       error: 'Failed to delete result',
       details: error.message 
@@ -953,7 +955,7 @@ app.delete('/api/results', authenticateToken, async (req, res) => {
     return res.json({ message: 'All results deleted successfully' });
   } catch (error) {
     db.exec('ROLLBACK');
-    console.error('Error deleting all results:', error);
+    logger.error('Error deleting all results:', error);
     return res.status(500).json({ error: error.message });
   }
 });
@@ -974,7 +976,7 @@ function formatDate(dateStr) {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error('Error:', err.stack);
+  logger.error('Error:', err.stack);
   res.status(err.status || 500).json({
     error: {
       message: err.message || 'Internal Server Error',
@@ -985,7 +987,7 @@ app.use((err, req, res, next) => {
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (err) => {
-  console.error('Uncaught Exception:', err);
+  logger.error('Uncaught Exception:', err);
   // Give time for logs to be written
   setTimeout(() => {
     process.exit(1);
@@ -994,7 +996,7 @@ process.on('uncaughtException', (err) => {
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
   // Give time for logs to be written
   setTimeout(() => {
     process.exit(1);
@@ -1003,15 +1005,15 @@ process.on('unhandledRejection', (reason, promise) => {
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
-  console.info('SIGTERM signal received. Closing HTTP server...');
+  logger.info('SIGTERM signal received. Closing HTTP server...');
   server.close(() => {
-    console.info('HTTP server closed');
+    logger.info('HTTP server closed');
     process.exit(0);
   });
 });
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
-  console.log(`CORS enabled for origins: ${allowedOrigins.join(', ')}`);
+  logger.info(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+  logger.info(`CORS enabled for origins: ${allowedOrigins.join(', ')}`);
 });
