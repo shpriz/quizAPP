@@ -98,12 +98,12 @@ if (!fs.existsSync(dbDir)) {
 
 const db = new Database(dbPath, { verbose: console.log });
 
-// Database initialization
+// Enable foreign keys
+db.pragma('foreign_keys = ON');
+
+// Database initialization - only called from admin panel
 function initializeDatabase() {
   try {
-    // Enable foreign keys
-    db.pragma('foreign_keys = ON');
-
     // Drop existing tables in reverse order of dependencies
     db.exec('DROP TABLE IF EXISTS detailed_answers');
     db.exec('DROP TABLE IF EXISTS section_scores');
@@ -216,6 +216,9 @@ async function exportToCSV(results) {
     'Фамилия',
     'Имя',
     'Дата',
+    // Total
+    'Общий балл',
+
     // Block 1
     'Блок 1 (балл)',
     'Блок 1 (результат)',
@@ -288,8 +291,7 @@ async function exportToCSV(results) {
     'Вопрос 4.5',
     'Ответ 4.5',
     'Балл 4.5',
-    // Total
-    'Общий балл'
+    
   ].join(',') + '\n';
 
   // Convert results to rows
@@ -365,14 +367,15 @@ async function exportToExcel(results) {
       { header: 'ID', key: 'id', width: 10 },
       { header: 'Фамилия', key: 'lastName', width: 20 },
       { header: 'Имя', key: 'firstName', width: 20 },
-      { header: 'Дата', key: 'date', width: 20 }
+      { header: 'Дата', key: 'date', width: 20 },
+      { header: 'Общий балл', key: 'totalScore', width: 15 }
     ];
 
     // Add columns for each block
     [1, 2, 3, 4].forEach(blockNum => {
       columns.push(
         { header: `Блок ${blockNum} (балл)`, key: `block${blockNum}Score`, width: 15 },
-        { header: `Блок ${blockNum} (результат)`, key: `block${blockNum}Result`, width: 20 }
+        { header: `Блок ${blockNum} (результат)`, key: `block${blockNum}Result`, width: 60 }
       );
       
       // Add columns for questions in this block
@@ -384,9 +387,6 @@ async function exportToExcel(results) {
         );
       });
     });
-
-    // Add total score column
-    columns.push({ header: 'Общий балл', key: 'totalScore', width: 15 });
 
     summarySheet.columns = columns;
 
@@ -406,15 +406,19 @@ async function exportToExcel(results) {
       const totalScore = result.total_score || 0;
       const detailedAnswers = result.detailed_answers || [];
 
-      // Group answers by block
+      // Group answers by block and question
       const answersByBlock = {};
       detailedAnswers.forEach(answer => {
-        const blockNumber = Math.floor(answer.question_id / 5) + 1;
-        const questionInBlock = (answer.question_id % 5) + 1;
+        const blockNumber = Math.floor((answer.question_id - 1) / 5) + 1;
+        const questionInBlock = ((answer.question_id - 1) % 5) + 1;
+        
         if (!answersByBlock[blockNumber]) {
           answersByBlock[blockNumber] = {};
         }
-        answersByBlock[blockNumber][questionInBlock] = answer;
+        if (!answersByBlock[blockNumber][questionInBlock]) {
+          answersByBlock[blockNumber][questionInBlock] = answer;
+        }
+        console.log(`Answer ${answer.question_id} -> Block ${blockNumber}, Question ${questionInBlock}`);
       });
 
       // Prepare row data
@@ -429,7 +433,7 @@ async function exportToExcel(results) {
       // Add data for each block
       [1, 2, 3, 4].forEach(blockNum => {
         const blockScore = sectionScores[`Блок ${blockNum}`] || 0;
-        const blockResult = calculateTestResult(blockNum, blockScore);
+        const blockResult = calculateTestResult(blockNum, blockScore) || 'Нет данных';
         
         rowData[`block${blockNum}Score`] = blockScore;
         rowData[`block${blockNum}Result`] = blockResult;
@@ -464,7 +468,8 @@ async function exportToExcel(results) {
           cell.numFmt = '0.00';
           cell.alignment = { horizontal: 'center' };
         } else if (column.key.endsWith('Result')) {
-          cell.alignment = { horizontal: 'center' };
+          cell.alignment = { horizontal: 'left', wrapText: true };
+          cell.font = { bold: true };
         }
       });
     });
@@ -560,88 +565,241 @@ app.get('/api/questions', (req, res) => {
 });
 
 app.post('/api/results', async (req, res) => {
+  const { firstName, lastName, sectionScores, totalScore, detailedAnswers } = req.body;
+  console.log('Saving results:', { 
+    firstName, 
+    lastName, 
+    totalScore, 
+    sectionScores,
+    answerCount: detailedAnswers?.length || 0
+  });
+
   try {
-    const { firstName, lastName, totalScore, sectionScores, detailedAnswers } = req.body;
+    db.exec('BEGIN TRANSACTION');
 
-    // Calculate test results for each section
-    const test1Score = sectionScores[0]?.score || 0;
-    const test2Score = sectionScores[1]?.score || 0;
-    const test3Score = sectionScores[2]?.score || 0;
-    const test4Score = sectionScores[3]?.score || 0;
+    try {
+      // Insert quiz result
+      const resultStmt = db.prepare(`
+        INSERT INTO quiz_results (first_name, last_name, total_score)
+        VALUES (?, ?, ?)
+      `);
+      const resultInfo = resultStmt.run(firstName, lastName, totalScore);
+      const resultId = resultInfo.lastInsertRowid;
 
-    const test1Result = calculateTestResult(1, test1Score);
-    const test2Result = calculateTestResult(2, test2Score);
-    const test3Result = calculateTestResult(3, test3Score);
-    const test4Result = calculateTestResult(4, test4Score);
+      // Insert section scores
+      const sectionScoreStmt = db.prepare(`
+        INSERT INTO section_scores (result_id, section_name, score)
+        VALUES (?, ?, ?)
+      `);
 
-    // Insert main result
-    const insertResult = db.prepare('INSERT INTO quiz_results (first_name, last_name, total_score) VALUES (?, ?, ?)');
-    const result = insertResult.run(firstName, lastName, totalScore);
+      // Convert section scores to proper format
+      if (Array.isArray(sectionScores)) {
+        sectionScores.forEach((section, index) => {
+          if (!section || typeof section.score !== 'number') {
+            console.warn('Invalid section score:', section);
+            return;
+          }
+          const sectionNumber = index + 1;
+          const sectionName = `Блок ${sectionNumber}`;
+          console.log('Saving section score:', { sectionName, score: section.score });
+          sectionScoreStmt.run(resultId, sectionName, section.score);
+        });
+      } else {
+        console.warn('sectionScores is not an array:', sectionScores);
+      }
 
-    const resultId = result.lastInsertRowid;
+      // Insert detailed answers
+      if (Array.isArray(detailedAnswers) && detailedAnswers.length > 0) {
+        const answerStmt = db.prepare(`
+          INSERT INTO detailed_answers (
+            result_id, question_id, question_text, 
+            answer_text, answer_index, possible_score, score
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `);
 
-    // Insert section scores with results
-    const insertSectionScore = db.prepare('INSERT INTO section_scores (result_id, section_name, score) VALUES (?, ?, ?)');
-    for (let i = 0; i < sectionScores.length; i++) {
-      const section = sectionScores[i];
-      const sectionResult = calculateTestResult(i + 1, section.score);
-      insertSectionScore.run(resultId, section.section_name, section.score);
+        detailedAnswers.forEach(answer => {
+          if (!answer) {
+            console.warn('Invalid answer:', answer);
+            return;
+          }
+
+          console.log('Saving answer:', {
+            questionId: answer.question_id,
+            question: answer.question_text,
+            answer: answer.answer_text,
+            score: answer.score
+          });
+
+          answerStmt.run(
+            resultId,
+            answer.question_id,
+            answer.question_text || '',
+            answer.answer_text || '',
+            answer.answer_index || 0,
+            answer.possible_score || 0,
+            answer.score || 0
+          );
+        });
+      } else {
+        console.warn('No detailed answers provided:', detailedAnswers);
+      }
+
+      db.exec('COMMIT');
+      console.log('Results saved successfully');
+      res.json({ 
+        success: true, 
+        message: 'Results saved successfully',
+        resultId: resultId
+      });
+    } catch (error) {
+      console.error('Error in transaction:', error);
+      db.exec('ROLLBACK');
+      throw error;
     }
-
-    // Insert detailed answers
-    const insertDetailedAnswer = db.prepare('INSERT INTO detailed_answers (result_id, question_id, question_text, answer_text, answer_index, possible_score, score) VALUES (?, ?, ?, ?, ?, ?, ?)');
-    for (const answer of detailedAnswers) {
-      insertDetailedAnswer.run(resultId, answer.question_id, answer.question_text, answer.answer_text, answer.answer_index, answer.possible_score, answer.score);
-    }
-
-    res.json({ 
-      success: true, 
-      resultId,
-      testResults: [test1Result, test2Result, test3Result, test4Result],
-      testScores: [test1Score, test2Score, test3Score, test4Score]
-    });
   } catch (error) {
     console.error('Error saving results:', error);
-    res.status(500).json({ error: 'Failed to save results' });
+    res.status(500).json({ error: 'Failed to save results', details: error.message });
   }
 });
 
-app.post('/api/results/excel', authenticateToken, async (req, res) => {
+// Получение отфильтрованных результатов
+function getFilteredResults(from, to, name) {
   try {
-    const { startDate, endDate } = req.body;
     let query = `
-      SELECT * FROM quiz_results 
+      SELECT 
+        r.*,
+        GROUP_CONCAT(DISTINCT s.section_name || ':' || s.score) as section_scores,
+        GROUP_CONCAT(
+          d.question_id || '|' || 
+          COALESCE(d.question_text, '') || '|' || 
+          COALESCE(d.answer_text, '') || '|' || 
+          COALESCE(d.answer_index, 0) || '|' || 
+          COALESCE(d.possible_score, 0) || '|' || 
+          COALESCE(d.score, 0),
+          ';;'
+        ) as detailed_answers
+      FROM quiz_results r
+      LEFT JOIN section_scores s ON r.id = s.result_id
+      LEFT JOIN detailed_answers d ON r.id = d.result_id
       WHERE 1=1
     `;
     const params = [];
 
-    if (startDate) {
-      query += ` AND created_at >= ?`;
-      params.push(startDate);
+    if (from) {
+      query += ` AND DATE(r.created_at) >= DATE(?)`;
+      params.push(from);
     }
-    if (endDate) {
-      query += ` AND created_at <= ?`;
-      params.push(endDate);
+    if (to) {
+      query += ` AND DATE(r.created_at) <= DATE(?)`;
+      params.push(to);
     }
-    query += ` ORDER BY created_at DESC`;
+    if (name) {
+      query += ` AND (r.first_name LIKE ? OR r.last_name LIKE ?)`;
+      params.push(`%${name}%`, `%${name}%`);
+    }
+    query += ` GROUP BY r.id ORDER BY r.created_at DESC`;
 
-    // Get all results within date range
+    console.log('Running query:', query, 'with params:', params);
     const results = db.prepare(query).all(...params);
+    
+    return results.map(result => {
+      // Parse section scores
+      const sectionScores = {};
+      if (result.section_scores) {
+        result.section_scores.split(',').forEach(score => {
+          const [name, value] = score.split(':');
+          sectionScores[name] = parseFloat(value);
+        });
+      }
 
-    // Get section scores and detailed answers for each result
-    const detailedResults = await Promise.all(results.map(async (result) => {
-      const sectionScores = db.prepare('SELECT * FROM section_scores WHERE result_id = ? ORDER BY section_name').all(result.id);
-      const answers = db.prepare('SELECT * FROM detailed_answers WHERE result_id = ? ORDER BY question_id').all(result.id);
-      
+      // Parse detailed answers
+      const detailedAnswers = [];
+      if (result.detailed_answers) {
+        result.detailed_answers.split(';;').forEach(answer => {
+          if (!answer) return;
+          const [questionId, questionText, answerText, answerIndex, possibleScore, score] = answer.split('|');
+          detailedAnswers.push({
+            question_id: parseInt(questionId),
+            question: questionText || '',
+            answer: answerText || '',
+            answer_index: parseInt(answerIndex) || 0,
+            possible_score: parseFloat(possibleScore) || 0,
+            score: parseFloat(score) || 0
+          });
+        });
+      }
+
+      // Sort detailed answers by question_id to maintain order
+      detailedAnswers.sort((a, b) => a.question_id - b.question_id);
+
       return {
-        ...result,
-        sectionScores,
-        answers
+        id: result.id,
+        first_name: result.first_name,
+        last_name: result.last_name,
+        created_at: result.created_at,
+        total_score: result.total_score,
+        section_scores: sectionScores,
+        detailed_answers: detailedAnswers
       };
-    }));
+    });
+  } catch (error) {
+    console.error('Error in getFilteredResults:', error);
+    throw error;
+  }
+}
 
-    // Removed ExcelJS usage
-    res.json({ success: true });
+app.get('/api/results', authenticateToken, async (req, res) => {
+  try {
+    const { from, to, name, format } = req.query;
+    console.log('Getting results with params:', { from, to, name, format });
+    
+    const results = getFilteredResults(from, to, name);
+    console.log(`Found ${results.length} results`);
+
+    if (format === 'csv') {
+      const csvContent = exportToCSV(results);
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=results.csv');
+      return res.send(csvContent);
+    } else if (format === 'excel') {
+      const buffer = await exportToExcel(results);
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename=results.xlsx');
+      return res.send(buffer);
+    }
+
+    res.json(results);
+  } catch (error) {
+    console.error('Error getting results:', error);
+    res.status(500).json({ error: 'Failed to get results', details: error.message });
+  }
+});
+
+app.get('/api/results/csv', authenticateToken, async (req, res) => {
+  try {
+    const { from, to, name } = req.query;
+    const results = getFilteredResults(from, to, name);
+    const csvContent = await exportToCSV(results);
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="test_results.csv"');
+    res.send(csvContent);
+  } catch (error) {
+    console.error('Error exporting results:', error);
+    res.status(500).json({ error: 'Failed to export results' });
+  }
+});
+
+app.get('/api/results/excel', authenticateToken, async (req, res) => {
+  try {
+    const { from, to, name } = req.query;
+    const results = getFilteredResults(from, to, name);
+    const excelBuffer = await exportToExcel(results);
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="test_results.xlsx"');
+    res.send(Buffer.from(excelBuffer));
   } catch (error) {
     console.error('Error exporting results:', error);
     res.status(500).json({ error: 'Failed to export results' });
@@ -675,55 +833,60 @@ app.post('/api/admin/reinit-db', authenticateToken, async (req, res) => {
   try {
     console.log('Reinitializing database...');
     
-    // Close existing connections
+    // Start transaction
     db.exec('BEGIN TRANSACTION');
     
-    // Drop existing tables
-    db.exec(`
-      DROP TABLE IF EXISTS detailed_answers;
-      DROP TABLE IF EXISTS section_scores;
-      DROP TABLE IF EXISTS quiz_results;
-    `);
-    
-    // Recreate tables
-    db.exec(`
-      CREATE TABLE quiz_results (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        first_name TEXT,
-        last_name TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        total_score REAL
-      );
+    try {
+      // Drop existing tables
+      db.exec(`
+        DROP TABLE IF EXISTS detailed_answers;
+        DROP TABLE IF EXISTS section_scores;
+        DROP TABLE IF EXISTS quiz_results;
+      `);
+      
+      // Recreate tables
+      db.exec(`
+        CREATE TABLE quiz_results (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          first_name TEXT,
+          last_name TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          total_score REAL
+        );
 
-      CREATE TABLE section_scores (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        result_id INTEGER,
-        section_number INTEGER,
-        score REAL,
-        FOREIGN KEY (result_id) REFERENCES quiz_results(id) ON DELETE CASCADE
-      );
+        CREATE TABLE section_scores (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          result_id INTEGER,
+          section_name TEXT,
+          score REAL,
+          FOREIGN KEY (result_id) REFERENCES quiz_results(id) ON DELETE CASCADE
+        );
 
-      CREATE TABLE detailed_answers (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        result_id INTEGER,
-        question_id INTEGER,
-        question_text TEXT,
-        answer_text TEXT,
-        answer_index INTEGER,
-        possible_score INTEGER,
-        score INTEGER,
-        FOREIGN KEY (result_id) REFERENCES quiz_results(id) ON DELETE CASCADE
-      );
-    `);
-    
-    db.exec('COMMIT');
-    console.log('Database reinitialized successfully');
-    
-    return res.json({ message: 'Database reinitialized successfully' });
+        CREATE TABLE detailed_answers (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          result_id INTEGER,
+          question_id INTEGER,
+          question_text TEXT,
+          answer_text TEXT,
+          answer_index INTEGER,
+          possible_score INTEGER,
+          score INTEGER,
+          FOREIGN KEY (result_id) REFERENCES quiz_results(id) ON DELETE CASCADE
+        );
+      `);
+
+      // Commit transaction
+      db.exec('COMMIT');
+      console.log('Database reinitialized successfully');
+      res.json({ success: true, message: 'Database reinitialized successfully' });
+    } catch (error) {
+      // Rollback on error
+      db.exec('ROLLBACK');
+      throw error;
+    }
   } catch (error) {
     console.error('Error reinitializing database:', error);
-    db.exec('ROLLBACK');
-    return res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Failed to reinitialize database' });
   }
 });
 
@@ -809,149 +972,6 @@ function formatDate(dateStr) {
   });
 }
 
-// Получение отфильтрованных результатов
-function getFilteredResults(from, to, name) {
-  let query = `
-    SELECT 
-      r.*,
-      GROUP_CONCAT(DISTINCT s.section_name || ':' || s.score) as section_scores,
-      GROUP_CONCAT(
-        d.question_id || '|' || 
-        d.question_text || '|' || 
-        d.answer_text || '|' || 
-        d.answer_index || '|' || 
-        d.possible_score || '|' || 
-        d.score,
-        ';;'
-      ) as detailed_answers
-    FROM quiz_results r
-    LEFT JOIN section_scores s ON r.id = s.result_id
-    LEFT JOIN detailed_answers d ON r.id = d.result_id
-    WHERE 1=1
-  `;
-  const params = [];
-
-  if (from) {
-    query += ` AND DATE(r.created_at) >= DATE(?)`;
-    params.push(from);
-  }
-  if (to) {
-    query += ` AND DATE(r.created_at) <= DATE(?)`;
-    params.push(to);
-  }
-  if (name) {
-    query += ` AND (r.first_name LIKE ? OR r.last_name LIKE ?)`;
-    params.push(`%${name}%`, `%${name}%`);
-  }
-  query += ` GROUP BY r.id ORDER BY r.created_at DESC`;
-
-  const results = db.prepare(query).all(...params);
-  return results.map(result => {
-    // Parse section scores
-    const sectionScores = {};
-    if (result.section_scores) {
-      result.section_scores.split(',').forEach(score => {
-        const [name, value] = score.split(':');
-        sectionScores[name] = parseFloat(value);
-      });
-    }
-
-    // Parse detailed answers
-    const detailedAnswers = [];
-    if (result.detailed_answers) {
-      result.detailed_answers.split(';;').forEach(answer => {
-        if (!answer) return;
-        const [questionId, questionText, answerText, answerIndex, possibleScore, score] = answer.split('|');
-        detailedAnswers.push({
-          question_id: parseInt(questionId),
-          question: questionText,
-          answer: answerText,
-          answer_index: parseInt(answerIndex),
-          possible_score: parseFloat(possibleScore),
-          score: parseFloat(score)
-        });
-      });
-    }
-
-    // Sort detailed answers by question_id to maintain order
-    detailedAnswers.sort((a, b) => a.question_id - b.question_id);
-
-    return {
-      ...result,
-      created_at: formatDate(result.created_at),
-      section_scores: sectionScores,
-      detailed_answers: detailedAnswers
-    };
-  });
-}
-
-app.get('/api/results', authenticateToken, async (req, res) => {
-  try {
-    const { from, to, name, format } = req.query;
-    const results = getFilteredResults(from, to, name);
-
-    if (format === 'csv') {
-      const csvData = exportToCSV(results);
-      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-      res.setHeader('Content-Disposition', 'attachment; filename="test_results.csv"');
-      return res.send(csvData);
-    } 
-    
-    if (format === 'excel') {
-      try {
-        const buffer = await exportToExcel(results);
-        if (!buffer || buffer.length === 0) {
-          throw new Error('Generated Excel buffer is empty');
-        }
-        console.log('Excel buffer size:', buffer.length, 'bytes');
-        
-        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        res.setHeader('Content-Disposition', 'attachment; filename="test_results.xlsx"');
-        res.setHeader('Content-Length', buffer.length);
-        return res.end(buffer);
-      } catch (excelError) {
-        console.error('Error generating Excel:', excelError);
-        return res.status(500).json({ error: 'Failed to generate Excel file' });
-      }
-    }
-    
-    return res.json(results);
-  } catch (error) {
-    console.error('Error getting results:', error);
-    return res.status(500).json({ error: error.message });
-  }
-});
-
-app.get('/api/results/csv', authenticateToken, async (req, res) => {
-  try {
-    const { from, to, name } = req.query;
-    const results = getFilteredResults(from, to, name);
-    const csvContent = await exportToCSV(results);
-
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename="test_results.csv"');
-    res.send(csvContent);
-  } catch (error) {
-    console.error('Error exporting results:', error);
-    res.status(500).json({ error: 'Failed to export results' });
-  }
-});
-
-app.get('/api/results/excel', authenticateToken, async (req, res) => {
-  try {
-    const { from, to, name } = req.query;
-    const results = getFilteredResults(from, to, name);
-    const excelBuffer = await exportToExcel(results);
-
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename="test_results.xlsx"');
-    res.send(Buffer.from(excelBuffer));
-  } catch (error) {
-    console.error('Error exporting results:', error);
-    res.status(500).json({ error: 'Failed to export results' });
-  }
-});
-
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Error:', err.stack);
@@ -992,9 +1012,6 @@ process.on('SIGTERM', () => {
 
 // Start server
 app.listen(PORT, () => {
-  // Initialize database when server starts
-  initializeDatabase();
   console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
   console.log(`CORS enabled for origins: ${allowedOrigins.join(', ')}`);
-  console.log('Database initialized');
 });
