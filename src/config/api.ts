@@ -1,5 +1,5 @@
 // Environment configuration
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://194.87.69.156:3000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://194.87.69.156:3002';
 
 // API endpoints
 export const API_ENDPOINTS = {
@@ -20,4 +20,16 @@ export default {
     apiBaseUrl: API_BASE_URL,
     endpoints: API_ENDPOINTS,
     getApiUrl
+};
+
+
+const fetchWithCredentials = (url: string, options: RequestInit = {}) => {
+  return fetch(url, {
+    ...options,
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
 };

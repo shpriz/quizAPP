@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Table, Button, Alert, Form, Row, Col, Card } from 'react-bootstrap';
 import AdminLogin from './AdminLogin';
-import { getApiUrl } from '../config/api';
+import { api, getApiUrl, API_ENDPOINTS } from '../config/api';
 
 interface AdminProps {
   onBackToWelcome: () => void;
@@ -30,35 +30,60 @@ const Admin: React.FC<AdminProps> = ({ onBackToWelcome }) => {
   const [dateFilter, setDateFilter] = useState({ from: '', to: '' });
   const [nameFilter, setNameFilter] = useState('');
 
+  // const fetchResults = async () => {
+  //   try {
+  //     const token = localStorage.getItem('adminToken');
+  //     const queryParams = new URLSearchParams();
+      
+  //     if (dateFilter.from) queryParams.append('from', dateFilter.from);
+  //     if (dateFilter.to) queryParams.append('to', dateFilter.to);
+  //     if (nameFilter) queryParams.append('name', nameFilter);
+
+  //     const response = await fetch(
+  //       `${getApiUrl('RESULTS')}?${queryParams.toString()}`,
+  //       {
+  //         headers: {
+  //           'Authorization': `Bearer ${token}`
+  //         }
+  //       }
+  //     );
+
+  //     if (!response.ok) {
+  //       throw new Error('Failed to fetch results');
+  //     }
+
+  //     const data = await response.json();
+  //     setResults(data);
+  //     setError('');
+  //   } catch (err) {
+  //     setError(err instanceof Error ? err.message : 'Произошла ошибка при загрузке результатов');
+  //   }
+  // };
+
   const fetchResults = async () => {
     try {
-      const token = localStorage.getItem('adminToken');
       const queryParams = new URLSearchParams();
-      
       if (dateFilter.from) queryParams.append('from', dateFilter.from);
       if (dateFilter.to) queryParams.append('to', dateFilter.to);
       if (nameFilter) queryParams.append('name', nameFilter);
-
-      const response = await fetch(
-        `${getApiUrl('RESULTS')}?${queryParams.toString()}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        }
-      );
-
+  
+      const response = await api.get(`${API_ENDPOINTS.RESULTS}?${queryParams.toString()}`);
       if (!response.ok) {
+        if (response.status === 401) {
+          setIsAuthenticated(false);
+          localStorage.removeItem('adminToken');
+          throw new Error('Unauthorized access');
+        }
         throw new Error('Failed to fetch results');
       }
-
       const data = await response.json();
       setResults(data);
       setError('');
-    } catch (err) {
+    } catch (err: any) { // Type as any to handle different error types
       setError(err instanceof Error ? err.message : 'Произошла ошибка при загрузке результатов');
     }
   };
+
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -120,40 +145,111 @@ const Admin: React.FC<AdminProps> = ({ onBackToWelcome }) => {
     }
   };
 
+  // const handleExport = async (format: 'csv' | 'excel') => {
+  //   try {
+  //     const token = localStorage.getItem('adminToken');
+  //     if (!token) {
+  //       setError('Необходима авторизация');
+  //       return;
+  //     }
+
+  //     const queryParams = new URLSearchParams();
+  //     if (dateFilter.from) queryParams.append('from', dateFilter.from);
+  //     if (dateFilter.to) queryParams.append('to', dateFilter.to);
+  //     if (nameFilter) queryParams.append('name', nameFilter);
+  //     queryParams.append('format', format);
+
+  //     const response = await fetch(
+  //       `${getApiUrl('RESULTS')}?${queryParams.toString()}`,
+  //       {
+  //         method: 'GET',
+  //         headers: {
+  //           'Authorization': `Bearer ${token}`,
+  //           'Accept': format === 'excel' 
+  //             ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  //             : 'text/csv'
+  //         }
+  //       }
+  //     );
+
+  //     if (!response.ok) {
+  //       if (response.status === 401 || response.status === 403) {
+  //         setIsAuthenticated(false);
+  //         localStorage.removeItem('adminToken');
+  //         throw new Error('Необходима авторизация');
+  //       }
+
+  //       const contentType = response.headers.get('content-type');
+  //       let errorMessage;
+        
+  //       if (contentType && contentType.includes('application/json')) {
+  //         const errorData = await response.json();
+  //         errorMessage = errorData.error || 'Неизвестная ошибка';
+  //       } else {
+  //         errorMessage = await response.text();
+  //       }
+        
+  //       throw new Error(errorMessage || 'Не удалось экспортировать результаты');
+  //     }
+
+  //     const blob = await response.blob();
+  //     if (blob.size === 0) {
+  //       throw new Error('Получен пустой файл');
+  //     }
+
+  //     const contentDisposition = response.headers.get('content-disposition');
+  //     const filename = contentDisposition
+  //       ? contentDisposition.split('filename=')[1].replace(/"/g, '')
+  //       : `test_results.${format === 'excel' ? 'xlsx' : format}`;
+
+  //     // Создаем URL для скачивания
+  //     const url = window.URL.createObjectURL(blob);
+  //     const a = document.createElement('a');
+  //     a.style.display = 'none';
+  //     a.href = url;
+  //     a.download = filename;
+      
+  //     // Добавляем в DOM, скачиваем и удаляем
+  //     document.body.appendChild(a);
+  //     a.click();
+      
+  //     // Очищаем ресурсы после задержки
+  //     setTimeout(() => {
+  //       document.body.removeChild(a);
+  //       window.URL.revokeObjectURL(url);
+  //     }, 100);
+  //   } catch (err) {
+  //     console.error('Export error:', err);
+  //     setError(err instanceof Error ? err.message : 'Произошла ошибка при экспорте');
+  //   }
+  // };
+
   const handleExport = async (format: 'csv' | 'excel') => {
     try {
-      const token = localStorage.getItem('adminToken');
-      if (!token) {
-        setError('Необходима авторизация');
-        return;
-      }
-
       const queryParams = new URLSearchParams();
       if (dateFilter.from) queryParams.append('from', dateFilter.from);
       if (dateFilter.to) queryParams.append('to', dateFilter.to);
       if (nameFilter) queryParams.append('name', nameFilter);
       queryParams.append('format', format);
-
-      const response = await fetch(
-        `${getApiUrl('RESULTS')}?${queryParams.toString()}`,
+  
+      const response = await fetchWithCredentials(
+        `${API_ENDPOINTS.RESULTS}?${queryParams.toString()}`,
         {
-          method: 'GET',
           headers: {
-            'Authorization': `Bearer ${token}`,
             'Accept': format === 'excel' 
               ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
               : 'text/csv'
           }
         }
       );
-
+  
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) {
           setIsAuthenticated(false);
           localStorage.removeItem('adminToken');
           throw new Error('Необходима авторизация');
         }
-
+  
         const contentType = response.headers.get('content-type');
         let errorMessage;
         
@@ -166,38 +262,40 @@ const Admin: React.FC<AdminProps> = ({ onBackToWelcome }) => {
         
         throw new Error(errorMessage || 'Не удалось экспортировать результаты');
       }
-
+  
       const blob = await response.blob();
       if (blob.size === 0) {
         throw new Error('Получен пустой файл');
       }
-
+  
       const contentDisposition = response.headers.get('content-disposition');
       const filename = contentDisposition
         ? contentDisposition.split('filename=')[1].replace(/"/g, '')
         : `test_results.${format === 'excel' ? 'xlsx' : format}`;
-
-      // Создаем URL для скачивания
+  
+      // Create download URL
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.style.display = 'none';
       a.href = url;
       a.download = filename;
       
-      // Добавляем в DOM, скачиваем и удаляем
+      // Add to DOM, trigger download and cleanup
       document.body.appendChild(a);
       a.click();
       
-      // Очищаем ресурсы после задержки
       setTimeout(() => {
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
       }, 100);
-    } catch (err) {
+  
+      setError('');
+    } catch (err: any) {
       console.error('Export error:', err);
       setError(err instanceof Error ? err.message : 'Произошла ошибка при экспорте');
     }
   };
+
 
   const handleResetDatabase = async () => {
     if (!window.confirm('Вы уверены, что хотите сбросить базу данных? Это действие нельзя отменить!')) {

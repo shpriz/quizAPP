@@ -16,12 +16,12 @@ const PORT = process.env.PORT || 3002;
 // Development and Production configurations
 const CONFIG = {
   development: {
-    allowedOrigins: ['http://194.87.69.156:3000'],
+    allowedOrigins: ['http://194.87.69.156:3000', 'http://194.87.69.156:3002'],
     databasePath: path.join(__dirname, 'data', 'quiz-data.json'),
     verbose: true
   },
   production: {
-    allowedOrigins: ['http://194.87.69.156:3000'],
+    allowedOrigins: ['http://194.87.69.156:3000', 'http://194.87.69.156:3002'],
     databasePath: path.join(__dirname, 'data', 'quiz-data.json'),
     verbose: false
   }
@@ -40,8 +40,15 @@ app.use(cors({
     }
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'X-Requested-With',
+    'Accept',
+    'Origin'
+  ],
+  credentials: true, 
+  maxAge: 86400 // 24 hours
 }));
 
 // Enable pre-flight requests for all routes
