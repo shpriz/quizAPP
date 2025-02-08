@@ -31,12 +31,12 @@ timeout /t 2 /nobreak > nul
 
 :: Start Frontend Server
 echo Starting frontend server...
-start cmd /k "set NODE_ENV=development && npm run dev -- --port 5173"
+start cmd /k "set NODE_ENV=development && npm run dev -- --port 3000"
 
 echo.
 echo Development servers are starting...
 echo Backend will be available at http://localhost:3002
-echo Frontend will be available at http://localhost:5173
+echo Frontend will be available at http://localhost:3000
 echo.
 echo To stop the servers, close both command windows or press Ctrl+C in each window.
 pause

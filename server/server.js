@@ -16,12 +16,17 @@ const PORT = process.env.PORT || 3002;
 // Development and Production configurations
 const CONFIG = {
   development: {
-    allowedOrigins: ['http://localhost:5173', 'http://localhost:3000'],
+    allowedOrigins: [
+      'http://localhost:3000',
+
+    ],
     databasePath: path.join(__dirname, 'data', 'quiz-data.json'),
     verbose: true
   },
   production: {
-    allowedOrigins: ['http://stomtest.nsmu.ru', 'https://stomtest.nsmu.ru', 'http://localhost:5173'],
+    allowedOrigins: ['http://stomtest.nsmu.ru', 
+      'https://stomtest.nsmu.ru', 
+      'http://localhost:3000'],
     databasePath: path.join(__dirname, 'data', 'quiz-data.json'),
     verbose: false
   }
@@ -528,7 +533,7 @@ app.post('/api/admin/login', (req, res) => {
 
   if (password === 'admin123') {
     logger.info('Login successful');
-    const token = jwt.sign({ role: 'admin' }, 'your-secret-key-here', { expiresIn: '1h' });
+    const token = jwt.sign({ role: 'admin' }, 'ciun[oub[o_ji8_h=8y=9u6777=7_=v-yc=v76-h87uvf0==98u=bub]09iiy', { expiresIn: '1h' });
     res.json({ token });
   } else {
     logger.info('Login failed: invalid password');
@@ -549,7 +554,7 @@ function authenticateToken(req, res, next) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  jwt.verify(token, 'your-secret-key-here', (err, user) => {
+  jwt.verify(token, 'ciun[oub[o_ji8_h=8y=9u6777=7_=v-yc=v76-h87uvf0==98u=bub]09iiy', (err, user) => {
     if (err) {
       logger.info('Token verification failed:', err.message);
       return res.status(403).json({ error: 'Invalid token' });
