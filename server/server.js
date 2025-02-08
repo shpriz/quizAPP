@@ -210,37 +210,137 @@ function calculateTestResult(testNumber, score) {
 }
 
 async function exportToCSV(results) {
+  // Headers
   const headers = [
     'ID',
-    'Имя',
     'Фамилия',
+    'Имя',
     'Дата',
-    'Общий балл',
-    'Тест 1 балл',
-    'Тест 1 результат',
-    'Тест 2 балл',
-    'Тест 2 результат',
-    'Тест 3 балл',
-    'Тест 3 результат',
-    'Тест 4 балл',
-    'Тест 4 результат'
+    // Block 1
+    'Блок 1 (балл)',
+    'Блок 1 (результат)',
+    'Вопрос 1.1',
+    'Ответ 1.1',
+    'Балл 1.1',
+    'Вопрос 1.2',
+    'Ответ 1.2',
+    'Балл 1.2',
+    'Вопрос 1.3',
+    'Ответ 1.3',
+    'Балл 1.3',
+    'Вопрос 1.4',
+    'Ответ 1.4',
+    'Балл 1.4',
+    'Вопрос 1.5',
+    'Ответ 1.5',
+    'Балл 1.5',
+    // Block 2
+    'Блок 2 (балл)',
+    'Блок 2 (результат)',
+    'Вопрос 2.1',
+    'Ответ 2.1',
+    'Балл 2.1',
+    'Вопрос 2.2',
+    'Ответ 2.2',
+    'Балл 2.2',
+    'Вопрос 2.3',
+    'Ответ 2.3',
+    'Балл 2.3',
+    'Вопрос 2.4',
+    'Ответ 2.4',
+    'Балл 2.4',
+    'Вопрос 2.5',
+    'Ответ 2.5',
+    'Балл 2.5',
+    // Block 3
+    'Блок 3 (балл)',
+    'Блок 3 (результат)',
+    'Вопрос 3.1',
+    'Ответ 3.1',
+    'Балл 3.1',
+    'Вопрос 3.2',
+    'Ответ 3.2',
+    'Балл 3.2',
+    'Вопрос 3.3',
+    'Ответ 3.3',
+    'Балл 3.3',
+    'Вопрос 3.4',
+    'Ответ 3.4',
+    'Балл 3.4',
+    'Вопрос 3.5',
+    'Ответ 3.5',
+    'Балл 3.5',
+    // Block 4
+    'Блок 4 (балл)',
+    'Блок 4 (результат)',
+    'Вопрос 4.1',
+    'Ответ 4.1',
+    'Балл 4.1',
+    'Вопрос 4.2',
+    'Ответ 4.2',
+    'Балл 4.2',
+    'Вопрос 4.3',
+    'Ответ 4.3',
+    'Балл 4.3',
+    'Вопрос 4.4',
+    'Ответ 4.4',
+    'Балл 4.4',
+    'Вопрос 4.5',
+    'Ответ 4.5',
+    'Балл 4.5',
+    // Total
+    'Общий балл'
   ].join(',') + '\n';
 
-  const rows = results.map(result => [
-    result.id,
-    result.first_name,
-    result.last_name,
-    new Date(result.created_at).toLocaleString(),
-    result.total_score,
-    result.test1_score,
-    `"${result.test1_result}"`,
-    result.test2_score,
-    `"${result.test2_result}"`,
-    result.test3_score,
-    `"${result.test3_result}"`,
-    result.test4_score,
-    `"${result.test4_result}"`
-  ].join(','));
+  // Convert results to rows
+  const rows = results.map(result => {
+    const sectionScores = result.section_scores || {};
+    const totalScore = result.total_score || 0;
+    const detailedAnswers = result.detailed_answers || [];
+
+    // Group answers by block
+    const answersByBlock = {};
+    detailedAnswers.forEach(answer => {
+      const blockNumber = Math.floor(answer.question_id / 5) + 1;
+      const questionInBlock = (answer.question_id % 5) + 1;
+      if (!answersByBlock[blockNumber]) {
+        answersByBlock[blockNumber] = {};
+      }
+      answersByBlock[blockNumber][questionInBlock] = answer;
+    });
+
+    // Build row data
+    const rowData = [
+      result.id,
+      result.last_name,
+      result.first_name,
+      result.created_at
+    ];
+
+    // Add data for each block
+    [1, 2, 3, 4].forEach(blockNum => {
+      const blockScore = sectionScores[`Блок ${blockNum}`] || 0;
+      const blockResult = calculateTestResult(blockNum, blockScore);
+      
+      // Add block score and result
+      rowData.push(blockScore, blockResult);
+
+      // Add questions and answers for this block
+      [1, 2, 3, 4, 5].forEach(questionNum => {
+        const answer = answersByBlock[blockNum]?.[questionNum] || {};
+        rowData.push(
+          answer.question || '',
+          answer.answer || '',
+          answer.score || 0
+        );
+      });
+    });
+
+    // Add total score
+    rowData.push(totalScore);
+
+    return rowData.join(',');
+  });
 
   return headers + rows.join('\n');
 }
@@ -255,29 +355,43 @@ async function exportToExcel(results) {
     workbook.created = new Date();
     workbook.modified = new Date();
     
-    const worksheet = workbook.addWorksheet('Результаты тестов', {
+    // Summary worksheet
+    const summarySheet = workbook.addWorksheet('Общие результаты', {
       properties: { tabColor: { argb: 'FF00BFFF' } }
     });
 
-    // Заголовки
-    worksheet.columns = [
+    // Define columns
+    const columns = [
       { header: 'ID', key: 'id', width: 10 },
-      { header: 'Фамилия', key: 'last_name', width: 20 },
-      { header: 'Имя', key: 'first_name', width: 20 },
-      { header: 'Дата прохождения', key: 'created_at', width: 20 },
-      { header: 'Общий балл', key: 'total_score', width: 15 },
-      { header: 'Тест 1: Балл', key: 'test1_score', width: 15 },
-      { header: 'Тест 1: Результат', key: 'test1_result', width: 40 },
-      { header: 'Тест 2: Балл', key: 'test2_score', width: 15 },
-      { header: 'Тест 2: Результат', key: 'test2_result', width: 40 },
-      { header: 'Тест 3: Балл', key: 'test3_score', width: 15 },
-      { header: 'Тест 3: Результат', key: 'test3_result', width: 40 },
-      { header: 'Тест 4: Балл', key: 'test4_score', width: 15 },
-      { header: 'Тест 4: Результат', key: 'test4_result', width: 40 }
+      { header: 'Фамилия', key: 'lastName', width: 20 },
+      { header: 'Имя', key: 'firstName', width: 20 },
+      { header: 'Дата', key: 'date', width: 20 }
     ];
 
-    // Стили для заголовков
-    const headerRow = worksheet.getRow(1);
+    // Add columns for each block
+    [1, 2, 3, 4].forEach(blockNum => {
+      columns.push(
+        { header: `Блок ${blockNum} (балл)`, key: `block${blockNum}Score`, width: 15 },
+        { header: `Блок ${blockNum} (результат)`, key: `block${blockNum}Result`, width: 20 }
+      );
+      
+      // Add columns for questions in this block
+      [1, 2, 3, 4, 5].forEach(questionNum => {
+        columns.push(
+          { header: `Вопрос ${blockNum}.${questionNum}`, key: `q${blockNum}_${questionNum}`, width: 40 },
+          { header: `Ответ ${blockNum}.${questionNum}`, key: `a${blockNum}_${questionNum}`, width: 40 },
+          { header: `Балл ${blockNum}.${questionNum}`, key: `s${blockNum}_${questionNum}`, width: 15 }
+        );
+      });
+    });
+
+    // Add total score column
+    columns.push({ header: 'Общий балл', key: 'totalScore', width: 15 });
+
+    summarySheet.columns = columns;
+
+    // Style the headers
+    const headerRow = summarySheet.getRow(1);
     headerRow.font = { bold: true, size: 12 };
     headerRow.fill = {
       type: 'pattern',
@@ -285,31 +399,55 @@ async function exportToExcel(results) {
       fgColor: { argb: 'FFE6F0FF' }
     };
     headerRow.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-    
-    console.log('Adding data rows...');
-    // Добавляем данные и форматируем ячейки
+
+    // Add data rows
     results.forEach((result, index) => {
-      const row = worksheet.addRow({
-        id: result.id,
-        first_name: result.first_name,
-        last_name: result.last_name,
-        created_at: new Date(result.created_at).toLocaleString('ru-RU'),
-        total_score: result.total_score,
-        test1_score: result.test1_score,
-        test1_result: result.test1_result,
-        test2_score: result.test2_score,
-        test2_result: result.test2_result,
-        test3_score: result.test3_score,
-        test3_result: result.test3_result,
-        test4_score: result.test4_score,
-        test4_result: result.test4_result
+      const sectionScores = result.section_scores || {};
+      const totalScore = result.total_score || 0;
+      const detailedAnswers = result.detailed_answers || [];
+
+      // Group answers by block
+      const answersByBlock = {};
+      detailedAnswers.forEach(answer => {
+        const blockNumber = Math.floor(answer.question_id / 5) + 1;
+        const questionInBlock = (answer.question_id % 5) + 1;
+        if (!answersByBlock[blockNumber]) {
+          answersByBlock[blockNumber] = {};
+        }
+        answersByBlock[blockNumber][questionInBlock] = answer;
       });
 
-      // Форматирование строки
+      // Prepare row data
+      const rowData = {
+        id: result.id,
+        lastName: result.last_name,
+        firstName: result.first_name,
+        date: result.created_at,
+        totalScore: totalScore
+      };
+
+      // Add data for each block
+      [1, 2, 3, 4].forEach(blockNum => {
+        const blockScore = sectionScores[`Блок ${blockNum}`] || 0;
+        const blockResult = calculateTestResult(blockNum, blockScore);
+        
+        rowData[`block${blockNum}Score`] = blockScore;
+        rowData[`block${blockNum}Result`] = blockResult;
+
+        // Add questions and answers for this block
+        [1, 2, 3, 4, 5].forEach(questionNum => {
+          const answer = answersByBlock[blockNum]?.[questionNum] || {};
+          rowData[`q${blockNum}_${questionNum}`] = answer.question || '';
+          rowData[`a${blockNum}_${questionNum}`] = answer.answer || '';
+          rowData[`s${blockNum}_${questionNum}`] = answer.score || 0;
+        });
+      });
+
+      const row = summarySheet.addRow(rowData);
+
+      // Style the row
       row.alignment = { vertical: 'middle', wrapText: true };
-      
-      // Чередующиеся цвета строк
-      if (index % 2 === 1) {
+      if ((index + 2) % 2 === 0) {
         row.fill = {
           type: 'pattern',
           pattern: 'solid',
@@ -317,24 +455,23 @@ async function exportToExcel(results) {
         };
       }
 
-      // Форматирование числовых ячеек
-      ['total_score', 'test1_score', 'test2_score', 'test3_score', 'test4_score'].forEach(key => {
-        const cell = row.getCell(key);
-        cell.numFmt = '0.00';
-        cell.alignment = { horizontal: 'center' };
-      });
-
-      // Форматирование текстовых ячеек с результатами
-      ['test1_result', 'test2_result', 'test3_result', 'test4_result'].forEach(key => {
-        const cell = row.getCell(key);
-        cell.alignment = { wrapText: true, vertical: 'middle' };
+      // Format score cells
+      row.eachCell((cell, colNumber) => {
+        const column = columns[colNumber - 1];
+        if (column.key.startsWith('block') && column.key.endsWith('Score') ||
+            column.key.startsWith('s') ||
+            column.key === 'totalScore') {
+          cell.numFmt = '0.00';
+          cell.alignment = { horizontal: 'center' };
+        } else if (column.key.endsWith('Result')) {
+          cell.alignment = { horizontal: 'center' };
+        }
       });
     });
 
-    console.log('Adding borders...');
-    // Добавляем границы для всех ячеек
-    worksheet.eachRow((row, rowNumber) => {
-      row.eachCell((cell) => {
+    // Add borders
+    summarySheet.eachRow(row => {
+      row.eachCell(cell => {
         cell.border = {
           top: { style: 'thin' },
           left: { style: 'thin' },
@@ -344,9 +481,16 @@ async function exportToExcel(results) {
       });
     });
 
-    // Закрепляем заголовок
-    worksheet.views = [
-      { state: 'frozen', xSplit: 0, ySplit: 1, activeCell: 'A2' }
+    // Freeze header row and enable filters
+    summarySheet.views = [
+      { 
+        state: 'frozen', 
+        xSplit: 0, 
+        ySplit: 1, 
+        activeCell: 'A2',
+        showRowColHeaders: true,
+        filterButton: true
+      }
     ];
 
     console.log('Generating Excel buffer...');
@@ -668,30 +812,77 @@ function formatDate(dateStr) {
 // Получение отфильтрованных результатов
 function getFilteredResults(from, to, name) {
   let query = `
-    SELECT * FROM quiz_results 
+    SELECT 
+      r.*,
+      GROUP_CONCAT(DISTINCT s.section_name || ':' || s.score) as section_scores,
+      GROUP_CONCAT(
+        d.question_id || '|' || 
+        d.question_text || '|' || 
+        d.answer_text || '|' || 
+        d.answer_index || '|' || 
+        d.possible_score || '|' || 
+        d.score,
+        ';;'
+      ) as detailed_answers
+    FROM quiz_results r
+    LEFT JOIN section_scores s ON r.id = s.result_id
+    LEFT JOIN detailed_answers d ON r.id = d.result_id
     WHERE 1=1
   `;
   const params = [];
 
   if (from) {
-    query += ` AND DATE(created_at) >= DATE(?)`;
+    query += ` AND DATE(r.created_at) >= DATE(?)`;
     params.push(from);
   }
   if (to) {
-    query += ` AND DATE(created_at) <= DATE(?)`;
+    query += ` AND DATE(r.created_at) <= DATE(?)`;
     params.push(to);
   }
   if (name) {
-    query += ` AND (first_name LIKE ? OR last_name LIKE ?)`;
+    query += ` AND (r.first_name LIKE ? OR r.last_name LIKE ?)`;
     params.push(`%${name}%`, `%${name}%`);
   }
-  query += ` ORDER BY created_at DESC`;
+  query += ` GROUP BY r.id ORDER BY r.created_at DESC`;
 
   const results = db.prepare(query).all(...params);
-  return results.map(result => ({
-    ...result,
-    created_at: formatDate(result.created_at)
-  }));
+  return results.map(result => {
+    // Parse section scores
+    const sectionScores = {};
+    if (result.section_scores) {
+      result.section_scores.split(',').forEach(score => {
+        const [name, value] = score.split(':');
+        sectionScores[name] = parseFloat(value);
+      });
+    }
+
+    // Parse detailed answers
+    const detailedAnswers = [];
+    if (result.detailed_answers) {
+      result.detailed_answers.split(';;').forEach(answer => {
+        if (!answer) return;
+        const [questionId, questionText, answerText, answerIndex, possibleScore, score] = answer.split('|');
+        detailedAnswers.push({
+          question_id: parseInt(questionId),
+          question: questionText,
+          answer: answerText,
+          answer_index: parseInt(answerIndex),
+          possible_score: parseFloat(possibleScore),
+          score: parseFloat(score)
+        });
+      });
+    }
+
+    // Sort detailed answers by question_id to maintain order
+    detailedAnswers.sort((a, b) => a.question_id - b.question_id);
+
+    return {
+      ...result,
+      created_at: formatDate(result.created_at),
+      section_scores: sectionScores,
+      detailed_answers: detailedAnswers
+    };
+  });
 }
 
 app.get('/api/results', authenticateToken, async (req, res) => {
