@@ -25,6 +25,7 @@ services:
       - CORS_ORIGIN=http://194.87.69.156:3000
     networks:
       - app-network
+    container_name: backend_upstream
 
 networks:
   app-network:
