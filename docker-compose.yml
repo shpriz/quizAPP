@@ -8,9 +8,11 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - VITE_API_URL=http://194.87.69.156:3002
+      - VITE_API_URL=/api
     networks:
       - app-network
+    depends_on:
+      - backend
 
   backend:
     build:
