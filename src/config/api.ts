@@ -33,21 +33,41 @@ export const fetchWithCredentials = (url: string, options: RequestInit = {}) => 
 
 // API methods
 export const api = {
-    get: (url: string) => fetchWithCredentials(url),
-    getWithHeaders: (url: string, headers: HeadersInit) => fetchWithCredentials(url, {
-        headers: headers
+    get: (url: string) => fetch(`${API_BASE_URL}${url}`, {
+        headers: {
+            'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
+            'Content-Type': 'application/json',
+        },
+        credentials: 'include'
     }),
-    post: (url: string, data: any) => fetchWithCredentials(url, {
+    
+    post: (url: string, data: any) => fetch(`${API_BASE_URL}${url}`, {
         method: 'POST',
         headers: {
+            'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
             'Content-Type': 'application/json',
         },
         body: JSON.stringify(data),
+        credentials: 'include'
     }),
-    delete: (url: string) => fetchWithCredentials(url, {
+    
+    delete: (url: string) => fetch(`${API_BASE_URL}${url}`, {
         method: 'DELETE',
+        headers: {
+            'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
+            'Content-Type': 'application/json',
+        },
+        credentials: 'include'
     }),
-  };
+    
+    getWithHeaders: (url: string, headers: HeadersInit) => fetch(`${API_BASE_URL}${url}`, {
+        headers: {
+            ...headers,
+            'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
+        },
+        credentials: 'include'
+    }),
+};
 
 // Export configuration for reference
 export default {

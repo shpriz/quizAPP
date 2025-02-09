@@ -21,8 +21,11 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3002
-      - JWT_SECRET=${JWT_SECRET:-your-secret-key}
+      - JWT_SECRET=your-secret-key
       - CORS_ORIGIN=http://194.87.69.156:3000
+    volumes:
+      - ./server/data:/app/data
+      - ./server/logs:/app/logs
     networks:
       - app-network
     container_name: backend_upstream
@@ -30,7 +33,3 @@ services:
 networks:
   app-network:
     driver: bridge
-
-volumes:
-  quiz_data:
-  quiz_logs:
