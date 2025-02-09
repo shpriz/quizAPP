@@ -40,10 +40,9 @@ try {
   }
   
   const fileContent = fs.readFileSync(quizDataPath, 'utf8');
-  if (isDevelopment) {
-    logger.info('Quiz data file content length:', fileContent.length);
-  }
-  
+ 
+ logger.info('Quiz data file content length:', fileContent.length);
+ 
   quizData = JSON.parse(fileContent);
   logger.info('Quiz data loaded successfully. Number of sections:', quizData.length);
 } catch (error) {
