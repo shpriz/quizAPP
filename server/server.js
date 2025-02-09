@@ -9,46 +9,13 @@ const { logger, requestLogger } = require('./logger');
 
 const app = express();
 
-// Environment variables and configuration
-const isDevelopment = process.env.NODE_ENV === 'development';
-const PORT = process.env.PORT || 3002;
-
-// Development and Production configurations
-const CONFIG = {
-  development: {
-    allowedOrigins: [
-      'http://localhost:3000',
-      'http://194.87.69.156:3000',
-      'http://stomtest.nsmu.ru:3000'
-    ],
-    databasePath: path.join(__dirname, 'data', 'quiz-data.json'),
-    verbose: true
-  },
-  production: {
-    allowedOrigins: [
-      'http://stomtest.nsmu.ru', 
-      'http://stomtest.nsmu.ru:3000',
-      'http://localhost:3000',
-      'http://194.87.69.156:3000'
-    ],
-    databasePath: path.join(__dirname, 'data', 'quiz-data.json'),
-    verbose: false
-  }
-};
-
-// Get current configuration
-const currentConfig = isDevelopment ? CONFIG.development : CONFIG.production;
-
 // CORS configuration
 app.use(cors({
-  origin: ['http://stomtest.nsmu.ru:3000', 'http://stomtest.nsmu.ru:3002', 'http://stomtest.nsmu.ru'],
+  origin: ['http://stomtest.nsmu.ru:5173', 'http://stomtest.nsmu.ru:3002', 'http://stomtest.nsmu.ru'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 }));
-
-// Enable pre-flight requests for all routes
-app.options('*', cors());
 
 app.use(express.json());
 app.use(requestLogger);  // Add request logging middleware
