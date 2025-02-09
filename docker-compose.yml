@@ -11,8 +11,6 @@ services:
       - VITE_API_URL=/api
     networks:
       - app-network
-    depends_on:
-      - backend
 
   backend:
     build:
@@ -26,8 +24,8 @@ services:
       - JWT_SECRET=your-secret-key
       - CORS_ORIGIN=http://194.87.69.156:3000
     volumes:
-      - ./server/data:/app/data
-      - ./server/logs:/app/logs
+      - ./server/data:/app/data    # Монтируем локальную директорию с данными
+      - ./server/logs:/app/logs    # Монтируем директорию для логов
     networks:
       - app-network
     container_name: backend_upstream
