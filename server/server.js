@@ -9,44 +9,92 @@ const { logger, requestLogger } = require('./logger');
 
 const app = express();
 
+// Environment variables and configuration
+const isDevelopment = process.env.NODE_ENV === 'development';
+const PORT = process.env.PORT || 3002;
+
+// Configuration
+const currentConfig = {
+    allowedOrigins: [
+        'http://localhost:3000',
+        'http://194.87.69.156:3000',
+        'http://194.87.69.156:3002',
+        'http://194.87.69.156'
+    ],
+    port: PORT,
+    databasePath: path.join(__dirname, 'data', 'quiz-data.json'),
+    verbose: isDevelopment
+};
+
 // CORS configuration
 app.use(cors({
-  origin: ['http://stomtest.nsmu.ru:5173', 'http://stomtest.nsmu.ru:3002', 'http://stomtest.nsmu.ru'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
+    origin: function(origin, callback) {
+        if (!origin || currentConfig.allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+        'Content-Type', 
+        'Authorization', 
+        'X-Requested-With',
+        'Accept',
+        'Origin'
+    ],
+    credentials: true,
+    maxAge: 86400
 }));
 
 app.use(express.json());
-app.use(requestLogger);  // Add request logging middleware
+app.use(requestLogger);
+app.use('/api', express.Router());
 
 // Логирование всех запросов (только в development)
-app.use((req, res, next) => {
-  logger.info(`${new Date().toISOString()} ${req.method} ${req.url}`);
-  next();
-});
+if (isDevelopment) {
+  app.use((req, res, next) => {
+    logger.info(`${new Date().toISOString()} ${req.method} ${req.url}`);
+    next();
+  });
+}
 
 // Load quiz data from JSON file
 let quizData;
 try {
-  const quizDataPath = currentConfig.databasePath;
-  logger.info('Loading quiz data from:', quizDataPath);
-  
-  if (!fs.existsSync(quizDataPath)) {
-    logger.error('Quiz data file not found:', quizDataPath);
-    throw new Error('Quiz data file not found');
-  }
-  
-  const fileContent = fs.readFileSync(quizDataPath, 'utf8');
- 
- logger.info('Quiz data file content length:', fileContent.length);
- 
-  quizData = JSON.parse(fileContent);
-  logger.info('Quiz data loaded successfully. Number of sections:', quizData.length);
+    const quizDataPath = currentConfig.databasePath;
+    logger.info(`Loading quiz data from: ${quizDataPath}`);
+
+    if (!fs.existsSync(quizDataPath)) {
+        logger.error(`Quiz data file not found: ${quizDataPath}`);
+        throw new Error('Quiz data file not found');
+    }
+
+    const fileContent = fs.readFileSync(quizDataPath, 'utf8');
+    logger.info(`Quiz data file content length: ${fileContent.length}`);
+
+    quizData = JSON.parse(fileContent);
+    logger.info(`Quiz data loaded successfully. Number of sections: ${quizData.length}`);
 } catch (error) {
-  logger.error('Error loading quiz data:', error);
-  quizData = [];
+    logger.error('Error loading quiz data:', error);
+    quizData = [];
 }
+
+// Global error handling
+process.on('uncaughtException', (err) => {
+    logger.error('Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+// Start the server
+app.listen(PORT, () => {
+    logger.info(`Server is running on port ${PORT}`);
+});
+
+
 
 // Initialize database
 const dbPath = path.join(__dirname, 'data', 'quiz.db');
@@ -574,74 +622,107 @@ app.post('/api/results', async (req, res) => {
   });
 
   try {
-    db.serialize(() => {
-      // Insert quiz result with overall result
-      const resultStmt = db.prepare(`
-        INSERT INTO quiz_results (first_name, last_name, total_score, overall_result)
-        VALUES (?, ?, ?, ?)
-      `);
-      const resultInfo = resultStmt.run(firstName, lastName, totalScore, overallResult);
-      const resultId = resultInfo.lastInsertRowid;
+    // db.serialize(() => {
+    //   // Insert quiz result with overall result
+    //   const resultStmt = db.prepare(`
+    //     INSERT INTO quiz_results (first_name, last_name, total_score, overall_result)
+    //     VALUES (?, ?, ?, ?)
+    //   `);
+    //   const resultInfo = resultStmt.run(firstName, lastName, totalScore, overallResult);
+    //   const resultId = resultInfo.lastInsertRowid;
 
-      // Insert section scores
-      const sectionScoreStmt = db.prepare(`
-        INSERT INTO section_scores (result_id, section_name, score)
-        VALUES (?, ?, ?)
-      `);
+    //   // Insert section scores
+    //   const sectionScoreStmt = db.prepare(`
+    //     INSERT INTO section_scores (result_id, section_name, score)
+    //     VALUES (?, ?, ?)
+    //   `);
 
-      // Convert section scores to proper format
-      if (Array.isArray(sectionScores)) {
-        sectionScores.forEach((section, index) => {
-          if (!section || typeof section.score !== 'number') {
-            logger.warn('Invalid section score:', section);
-            return;
+    //   // Convert section scores to proper format
+    //   if (Array.isArray(sectionScores)) {
+    //     sectionScores.forEach((section, index) => {
+    //       if (!section || typeof section.score !== 'number') {
+    //         logger.warn('Invalid section score:', section);
+    //         return;
+    //       }
+    //       const sectionNumber = index + 1;
+    //       const sectionName = `Блок ${sectionNumber}`;
+    //       logger.info('Saving section score:', { sectionName, score: section.score });
+    //       sectionScoreStmt.run(resultId, sectionName, section.score);
+    //     });
+    //   } else {
+    //     logger.warn('sectionScores is not an array:', sectionScores);
+    //   }
+
+    //   // Insert detailed answers
+    //   if (Array.isArray(detailedAnswers) && detailedAnswers.length > 0) {
+    //     const answerStmt = db.prepare(`
+    //       INSERT INTO detailed_answers (
+    //         result_id, question_id, question_text, 
+    //         answer_text, answer_index, possible_score, score
+    //       )
+    //       VALUES (?, ?, ?, ?, ?, ?, ?)
+    //     `);
+
+    //     detailedAnswers.forEach(answer => {
+    //       if (!answer) {
+    //         logger.warn('Invalid answer:', answer);
+    //         return;
+    //       }
+
+    //       logger.info('Saving answer:', {
+    //         questionId: answer.question_id,
+    //         question: answer.question_text,
+    //         answer: answer.answer_text,
+    //         score: answer.score
+    //       });
+
+    //       answerStmt.run(
+    //         resultId,
+    //         answer.question_id,
+    //         answer.question_text || '',
+    //         answer.answer_text || '',
+    //         answer.answer_index || 0,
+    //         answer.possible_score || 0,
+    //         answer.score || 0
+    //       );
+    //     });
+    //   } else {
+    //     logger.warn('No detailed answers provided:', detailedAnswers);
+    //   }
+    // });
+    const resultId = await new Promise((resolve, reject) => {
+      db.serialize(() => {
+        db.run(
+          'INSERT INTO results (first_name, last_name, total_score, overall_result, created_at) VALUES (?, ?, ?, ?, datetime("now"))',
+          [firstName, lastName, totalScore, overallResult],
+          function(err) {
+            if (err) reject(err);
+            resolve(this.lastID);
           }
-          const sectionNumber = index + 1;
-          const sectionName = `Блок ${sectionNumber}`;
-          logger.info('Saving section score:', { sectionName, score: section.score });
-          sectionScoreStmt.run(resultId, sectionName, section.score);
-        });
-      } else {
-        logger.warn('sectionScores is not an array:', sectionScores);
-      }
-
-      // Insert detailed answers
-      if (Array.isArray(detailedAnswers) && detailedAnswers.length > 0) {
-        const answerStmt = db.prepare(`
-          INSERT INTO detailed_answers (
-            result_id, question_id, question_text, 
-            answer_text, answer_index, possible_score, score
-          )
-          VALUES (?, ?, ?, ?, ?, ?, ?)
-        `);
-
-        detailedAnswers.forEach(answer => {
-          if (!answer) {
-            logger.warn('Invalid answer:', answer);
-            return;
-          }
-
-          logger.info('Saving answer:', {
-            questionId: answer.question_id,
-            question: answer.question_text,
-            answer: answer.answer_text,
-            score: answer.score
-          });
-
-          answerStmt.run(
-            resultId,
-            answer.question_id,
-            answer.question_text || '',
-            answer.answer_text || '',
-            answer.answer_index || 0,
-            answer.possible_score || 0,
-            answer.score || 0
-          );
-        });
-      } else {
-        logger.warn('No detailed answers provided:', detailedAnswers);
-      }
+        );
+      });
     });
+    // Now resultId is available here
+    await Promise.all([
+      ...sectionScores.map(score => 
+        new Promise((resolve, reject) => {
+          db.run(
+            'INSERT INTO section_scores (result_id, section_number, score) VALUES (?, ?, ?)',
+            [resultId, score.sectionNumber, score.score],
+            err => err ? reject(err) : resolve()
+          );
+        })
+      ),
+      ...detailedAnswers.map(answer => 
+        new Promise((resolve, reject) => {
+          db.run(
+            'INSERT INTO detailed_answers (result_id, question_number, answer, is_correct) VALUES (?, ?, ?, ?)',
+            [resultId, answer.questionNumber, answer.answer, answer.isCorrect],
+            err => err ? reject(err) : resolve()
+          );
+        })
+      )
+    ]);
 
     logger.info('Results saved successfully');
     res.json({ 
@@ -649,6 +730,10 @@ app.post('/api/results', async (req, res) => {
       message: 'Results saved successfully',
       resultId: resultId
     });
+
+    res.json({ success: true, resultId });
+
+
   } catch (error) {
     logger.error('Error saving results:', error);
     res.status(500).json({ error: 'Failed to save results', details: error.message });
@@ -967,7 +1052,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // Error handling middleware
-app.use((err, req, res, next) => {
+app.use((err, res)  => {
   logger.error('Error:', err.stack);
   res.status(err.status || 500).json({
     error: {
@@ -975,6 +1060,16 @@ app.use((err, req, res, next) => {
       status: err.status || 500
     }
   });
+});
+
+// Error handling middleware should be last
+app.use('/api/*', (res) => {
+  res.status(404).json({ error: 'Not Found' });
+});
+
+app.use((err, res ) => {
+  logger.error('Unhandled error:', err);
+  res.status(500).json({ error: 'Internal Server Error' });
 });
 
 // Handle uncaught exceptions

@@ -1,5 +1,12 @@
+// Environment configuration
+const DEVELOPMENT_API = 'http://localhost:3002';
+const PRODUCTION_API = 'https://stomtest.nsmu.ru/api';
 
-const API_BASE_URL = 'https://stomtest.nsmu.ru:5173/api';
+// Check if we're in development mode
+const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+// Get the base API URL based on environment
+export const API_BASE_URL = isDevelopment ? DEVELOPMENT_API : PRODUCTION_API;
 
 // API endpoints
 export const API_ENDPOINTS = {
@@ -17,7 +24,8 @@ export function getApiUrl(endpoint: keyof typeof API_ENDPOINTS): string {
 
 // Export configuration for reference
 export const CONFIG = {
+    isDevelopment,
     apiBaseUrl: API_BASE_URL,
-    frontendPort: 5173,
+    frontendPort: isDevelopment ? 5173 : 3000,
     backendPort: 3002
-};
+}

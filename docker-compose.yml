@@ -34,7 +34,7 @@ services:
       - CORS_ORIGIN=http://stomtest.nsmu.ru:5173
     hostname: stomtest.nsmu.ru
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3002/api"]
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3002/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
