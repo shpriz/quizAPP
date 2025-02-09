@@ -16,10 +16,6 @@ RUN npm install --omit=dev
 # Copy application code
 COPY . .
 
-# Явно копируем файл с вопросами
-COPY server/data/quiz-data.json /app/data/quiz-data.json
-
-
 # Create data and logs directories and set permissions
 RUN mkdir -p /app/data /app/logs && \
     chown -R node:node /app
