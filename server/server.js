@@ -21,12 +21,10 @@ app.use(express.json());
 app.use(requestLogger);  // Add request logging middleware
 
 // Логирование всех запросов (только в development)
-if (isDevelopment) {
-  app.use((req, next) => {
-    logger.info(`${new Date().toISOString()} ${req.method} ${req.url}`);
-    next();
-  });
-}
+app.use((req, res, next) => {
+  logger.info(`${new Date().toISOString()} ${req.method} ${req.url}`);
+  next();
+});
 
 // Load quiz data from JSON file
 let quizData;
