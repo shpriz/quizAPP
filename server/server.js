@@ -13,35 +13,39 @@ const app = express();
 const isDevelopment = process.env.NODE_ENV === 'development';
 const PORT = process.env.PORT || 3002;
 
-// Development and Production configurations
-const CONFIG = {
-  development: {
-    allowedOrigins: ['http://194.87.69.156:3000', 'http://194.87.69.156:3002'],
-    databasePath: path.join(__dirname, 'data', 'quiz-data.json'),
-    verbose: true
-  },
-  production: {
-    allowedOrigins: ['http://194.87.69.156:3000', 'http://194.87.69.156:3002'],
-    databasePath: path.join(__dirname, 'data', 'quiz-data.json'),
-    verbose: false
-  }
-};
-
-
 // Configuration
-// В начале файла, обновите конфигурацию CORS
-const corsOptions = {
-  origin: ['http://194.87.69.156:3000', 'http://194.87.69.156', 'http://localhost:3000'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
-  credentials: true,
-  optionsSuccessStatus: 200
+const currentConfig = {
+    allowedOrigins: [
+        'http://localhost:3000',
+        'http://194.87.69.156:3000',
+        'http://194.87.69.156:3002',
+        'http://194.87.69.156'
+    ],
+    port: PORT,
+    databasePath: path.join(__dirname, 'data', 'quiz-data.json'),
+    verbose: isDevelopment
 };
 
-app.use(cors(corsOptions));
-
-// Добавьте middleware для предварительной обработки OPTIONS запросов
-app.options('*', cors(corsOptions));
+// CORS configuration
+app.use(cors({
+    origin: function(origin, callback) {
+        if (!origin || currentConfig.allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+        'Content-Type', 
+        'Authorization', 
+        'X-Requested-With',
+        'Accept',
+        'Origin'
+    ],
+    credentials: true,
+    maxAge: 86400
+}));
 
 app.use(express.json());
 app.use(requestLogger);  // Add request logging middleware
