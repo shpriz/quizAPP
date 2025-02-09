@@ -10,9 +10,6 @@ services:
       - "5173:5173"
     environment:
       - VITE_API_URL=http://stomtest.nsmu.ru:3002
-    networks:
-      app-network:
-        ipv4_address: 172.16.0.2
     hostname: stomtest.nsmu.ru
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:5173"]
@@ -35,9 +32,6 @@ services:
       - PORT=3002
       - JWT_SECRET=${JWT_SECRET:-your-secret-key}
       - CORS_ORIGIN=http://stomtest.nsmu.ru:5173
-    networks:
-      app-network:
-        ipv4_address: 172.16.0.3
     hostname: stomtest.nsmu.ru
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3002/api"]
