@@ -29,40 +29,19 @@ const CONFIG = {
 
 
 // Configuration
-const currentConfig = {
-  allowedOrigins: [
-      'http://localhost:3000',
-      'http://194.87.69.156:3000',
-      'http://194.87.69.156:3002',
-      'http://194.87.69.156'
-  ],
-  port: process.env.PORT || 3002,
-  dbUrl: process.env.MONGODB_URI || 'mongodb://localhost:27017/quiz_db'
+// В начале файла, обновите конфигурацию CORS
+const corsOptions = {
+  origin: ['http://194.87.69.156:3000', 'http://194.87.69.156', 'http://localhost:3000'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  credentials: true,
+  optionsSuccessStatus: 200
 };
 
-// CORS configuration
-app.use(cors({
-  origin: function(origin, callback) {
-    if (!origin || currentConfig.allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: [
-    'Content-Type', 
-    'Authorization', 
-    'X-Requested-With',
-    'Accept',
-    'Origin'
-  ],
-  credentials: true, 
-  maxAge: 86400
-}));
+app.use(cors(corsOptions));
 
-// Enable pre-flight requests for all routes
-app.options('*', cors());
+// Добавьте middleware для предварительной обработки OPTIONS запросов
+app.options('*', cors(corsOptions));
 
 app.use(express.json());
 app.use(requestLogger);  // Add request logging middleware
@@ -80,9 +59,11 @@ if (isDevelopment) {
 // Load quiz data from JSON file
 let quizData;
 try {
-  const quizDataPath = currentConfig.databasePath;
+// Обновите путь к файлу с вопросами
+  const quizDataPath = path.join(__dirname, 'data', 'quiz-data.json');
   logger.info('Loading quiz data from:', quizDataPath);
-  
+
+
   if (!fs.existsSync(quizDataPath)) {
     logger.error('Quiz data file not found:', quizDataPath);
     throw new Error('Quiz data file not found');
