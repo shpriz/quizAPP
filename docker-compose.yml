@@ -26,8 +26,9 @@ services:
       - JWT_SECRET=your-secret-key
       - CORS_ORIGIN=http://194.87.69.156
     volumes:
-      - ./server:/app/server
       - ./server/data:/app/data
+      - ./server/logs:/app/logs
+      - ./server/quiz.db:/app/quiz.db
     networks:
       - app-network
     container_name: backend_upstream
