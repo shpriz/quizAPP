@@ -14,7 +14,7 @@ services:
     depends_on:
       - backend
 
- backend:
+  backend:  # Убрал лишний пробел
     build:
       context: ./server
       dockerfile: Dockerfile
