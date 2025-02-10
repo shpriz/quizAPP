@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Table, Button, Alert, Form, Row, Col, Card } from 'react-bootstrap';
 import AdminLogin from './AdminLogin';
-import { api, getApiUrl, API_ENDPOINTS } from '../config/api';
+import { api, API_ENDPOINTS, DatabaseResponse } from '../config/api';
+
 
 interface AdminProps {
   onBackToWelcome: () => void;
 }
+
+
+
 
 interface Result {
   id: number;
@@ -30,60 +34,27 @@ const Admin: React.FC<AdminProps> = ({ onBackToWelcome }) => {
   const [dateFilter, setDateFilter] = useState({ from: '', to: '' });
   const [nameFilter, setNameFilter] = useState('');
 
-  // const fetchResults = async () => {
-  //   try {
-  //     const token = localStorage.getItem('adminToken');
-  //     const queryParams = new URLSearchParams();
-      
-  //     if (dateFilter.from) queryParams.append('from', dateFilter.from);
-  //     if (dateFilter.to) queryParams.append('to', dateFilter.to);
-  //     if (nameFilter) queryParams.append('name', nameFilter);
-
-  //     const response = await fetch(
-  //       `${getApiUrl('RESULTS')}?${queryParams.toString()}`,
-  //       {
-  //         headers: {
-  //           'Authorization': `Bearer ${token}`
-  //         }
-  //       }
-  //     );
-
-  //     if (!response.ok) {
-  //       throw new Error('Failed to fetch results');
-  //     }
-
-  //     const data = await response.json();
-  //     setResults(data);
-  //     setError('');
-  //   } catch (err) {
-  //     setError(err instanceof Error ? err.message : 'Произошла ошибка при загрузке результатов');
-  //   }
-  // };
 
   const fetchResults = async () => {
     try {
-      const queryParams = new URLSearchParams();
-      if (dateFilter.from) queryParams.append('from', dateFilter.from);
-      if (dateFilter.to) queryParams.append('to', dateFilter.to);
-      if (nameFilter) queryParams.append('name', nameFilter);
-  
-      const response = await api.get(`${API_ENDPOINTS.RESULTS}?${queryParams.toString()}`);
-      if (!response.ok) {
-        if (response.status === 401) {
-          setIsAuthenticated(false);
-          localStorage.removeItem('adminToken');
-          throw new Error('Unauthorized access');
+        const queryParams = new URLSearchParams();
+        if (dateFilter.from) queryParams.append('from', dateFilter.from);
+        if (dateFilter.to) queryParams.append('to', dateFilter.to);
+        if (nameFilter) queryParams.append('name', nameFilter);
+    
+        const data = await api.get<Result[]>(`${API_ENDPOINTS.RESULTS}?${queryParams.toString()}`);
+        setResults(data);
+        setError('');
+    } catch (err: any) {
+        if (err.status === 401) {
+            setIsAuthenticated(false);
+            localStorage.removeItem('adminToken');
+            setError('Сессия истекла. Пожалуйста, войдите снова.');
+        } else {
+            setError(err instanceof Error ? err.message : 'Произошла ошибка при загрузке результатов');
         }
-        throw new Error('Failed to fetch results');
-      }
-      const data = await response.json();
-      setResults(data);
-      setError('');
-    } catch (err: any) { // Type as any to handle different error types
-      setError(err instanceof Error ? err.message : 'Произошла ошибка при загрузке результатов');
     }
-  };
-
+};
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -93,474 +64,134 @@ const Admin: React.FC<AdminProps> = ({ onBackToWelcome }) => {
 
   const handleDeleteResult = async (id: number) => {
     if (!window.confirm('Вы уверены, что хотите удалить этот результат?')) {
-      return;
-    }
-
-    try {
-      const token = localStorage.getItem('adminToken');
-      if (!token) {
-        setError('Необходима авторизация');
         return;
-      }
-
-      console.log('Sending delete request for id:', id);
-      const response = await fetch(`${getApiUrl('RESULTS')}/${id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json'
-        }
-      });
-
-      console.log('Delete response status:', response.status);
-      
-      if (!response.ok) {
-        if (response.status === 401 || response.status === 403) {
-          setIsAuthenticated(false);
-          localStorage.removeItem('adminToken');
-          throw new Error('Необходима авторизация');
-        }
-
-        const contentType = response.headers.get('content-type');
-        let errorMessage;
-        
-        if (contentType && contentType.includes('application/json')) {
-          const errorData = await response.json();
-          errorMessage = errorData.error || 'Неизвестная ошибка';
-        } else {
-          errorMessage = await response.text();
-        }
-        
-        throw new Error(errorMessage);
-      }
-
-      const data = await response.json();
-      console.log('Delete response data:', data);
-
-      await fetchResults(); // Обновляем список после удаления
-      setError('');
-    } catch (err) {
-      console.error('Error in handleDeleteResult:', err);
-      setError(err instanceof Error ? err.message : 'Произошла ошибка при удалении результата');
     }
-  };
 
-  // const handleExport = async (format: 'csv' | 'excel') => {
-  //   try {
-  //     const queryParams = new URLSearchParams();
-  //     if (dateFilter.from) queryParams.append('from', dateFilter.from);
-  //     if (dateFilter.to) queryParams.append('to', dateFilter.to);
-  //     if (nameFilter) queryParams.append('name', nameFilter);
-  //     queryParams.append('format', format);
-  
-  //     const response = await fetchWithCredentials(
-  //       `${API_ENDPOINTS.RESULTS}?${queryParams.toString()}`,
-  //       {
-  //         headers: {
-  //           'Accept': format === 'excel' 
-  //             ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-  //             : 'text/csv'
-  //         }
-  //       }
-  //     );
-  
-  //     if (!response.ok) {
-  //       if (response.status === 401 || response.status === 403) {
-  //         setIsAuthenticated(false);
-  //         localStorage.removeItem('adminToken');
-  //         throw new Error('Необходима авторизация');
-  //       }
-  
-  //       const contentType = response.headers.get('content-type');
-  //       let errorMessage;
-        
-  //       if (contentType && contentType.includes('application/json')) {
-  //         const errorData = await response.json();
-  //         errorMessage = errorData.error || 'Неизвестная ошибка';
-  //       } else {
-  //         errorMessage = await response.text();
-  //       }
-        
-  //       throw new Error(errorMessage || 'Не удалось экспортировать результаты');
-  //     }
-  
-  //     const blob = await response.blob();
-  //     if (blob.size === 0) {
-  //       throw new Error('Получен пустой файл');
-  //     }
-  
-  //     const contentDisposition = response.headers.get('content-disposition');
-  //     const filename = contentDisposition
-  //       ? contentDisposition.split('filename=')[1].replace(/"/g, '')
-  //       : `test_results.${format === 'excel' ? 'xlsx' : format}`;
-  
-  //     // Create download URL
-  //     const url = window.URL.createObjectURL(blob);
-  //     const a = document.createElement('a');
-  //     a.style.display = 'none';
-  //     a.href = url;
-  //     a.download = filename;
-      
-  //     // Add to DOM, trigger download and cleanup
-  //     document.body.appendChild(a);
-  //     a.click();
-      
-  //     setTimeout(() => {
-  //       document.body.removeChild(a);
-  //       window.URL.revokeObjectURL(url);
-  //     }, 100);
-  
-  //     setError('');
-  //   } catch (err: any) {
-  //     console.error('Export error:', err);
-  //     setError(err instanceof Error ? err.message : 'Произошла ошибка при экспорте');
-  //   }
-  // };
-
-
-  // const handleExport = async (format: 'csv' | 'excel') => {
-  //   try {
-  //     const token = localStorage.getItem('adminToken');
-  //     if (!token) {
-  //       setError('Необходима авторизация');
-  //       return;
-  //     }
-
-  //     const queryParams = new URLSearchParams();
-  //     if (dateFilter.from) queryParams.append('from', dateFilter.from);
-  //     if (dateFilter.to) queryParams.append('to', dateFilter.to);
-  //     if (nameFilter) queryParams.append('name', nameFilter);
-  //     queryParams.append('format', format);
-
-  //     const response = await fetch(
-  //       `${getApiUrl('RESULTS')}?${queryParams.toString()}`,
-  //       {
-  //         method: 'GET',
-  //         headers: {
-  //           'Authorization': `Bearer ${token}`,
-  //           'Accept': format === 'excel' 
-  //             ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-  //             : 'text/csv'
-  //         }
-  //       }
-  //     );
-
-  //     if (!response.ok) {
-  //       if (response.status === 401 || response.status === 403) {
-  //         setIsAuthenticated(false);
-  //         localStorage.removeItem('adminToken');
-  //         throw new Error('Необходима авторизация');
-  //       }
-
-  //       const contentType = response.headers.get('content-type');
-  //       let errorMessage;
-        
-  //       if (contentType && contentType.includes('application/json')) {
-  //         const errorData = await response.json();
-  //         errorMessage = errorData.error || 'Неизвестная ошибка';
-  //       } else {
-  //         errorMessage = await response.text();
-  //       }
-        
-  //       throw new Error(errorMessage || 'Не удалось экспортировать результаты');
-  //     }
-
-  //     const blob = await response.blob();
-  //     if (blob.size === 0) {
-  //       throw new Error('Получен пустой файл');
-  //     }
-
-  //     const contentDisposition = response.headers.get('content-disposition');
-  //     const filename = contentDisposition
-  //       ? contentDisposition.split('filename=')[1].replace(/"/g, '')
-  //       : `test_results.${format === 'excel' ? 'xlsx' : format}`;
-
-  //     // Создаем URL для скачивания
-  //     const url = window.URL.createObjectURL(blob);
-  //     const a = document.createElement('a');
-  //     a.style.display = 'none';
-  //     a.href = url;
-  //     a.download = filename;
-      
-  //     // Добавляем в DOM, скачиваем и удаляем
-  //     document.body.appendChild(a);
-  //     a.click();
-      
-  //     // Очищаем ресурсы после задержки
-  //     setTimeout(() => {
-  //       document.body.removeChild(a);
-  //       window.URL.revokeObjectURL(url);
-  //     }, 100);
-  //   } catch (err) {
-  //     console.error('Export error:', err);
-  //     setError(err instanceof Error ? err.message : 'Произошла ошибка при экспорте');
-  //   }
-  // };
-
-  // const handleResetDatabase = async () => {
-  //   if (!window.confirm('Вы уверены, что хотите сбросить базу данных? Это действие нельзя отменить!')) {
-  //     return;
-  //   }
-
-  //   try {
-  //     const token = localStorage.getItem('adminToken');
-  //     if (!token) {
-  //       setError('Необходима авторизация');
-  //       return;
-  //     }
-
-  //     const response = await fetch(getApiUrl('ADMIN_RESET_DB'), {
-  //       method: 'POST',
-  //       headers: {
-  //         'Authorization': `Bearer ${token}`,
-  //         'Accept': 'application/json',
-  //         'Content-Type': 'application/json'
-  //       }
-  //     });
-
-  //     if (!response.ok) {
-  //       if (response.status === 401 || response.status === 403) {
-  //         setIsAuthenticated(false);
-  //         localStorage.removeItem('adminToken');
-  //         throw new Error('Необходима авторизация');
-  //       }
-
-  //       const contentType = response.headers.get('content-type');
-  //       let errorMessage;
-        
-  //       if (contentType && contentType.includes('application/json')) {
-  //         const errorData = await response.json();
-  //         errorMessage = errorData.error || 'Неизвестная ошибка';
-  //       } else {
-  //         errorMessage = await response.text();
-  //       }
-        
-  //       throw new Error(errorMessage);
-  //     }
-
-  //     const data = await response.json();
-  //     console.log('Reset response:', data);
-
-  //     await fetchResults();
-  //     setError('');
-  //   } catch (err) {
-  //     console.error('Error in handleResetDatabase:', err);
-  //     setError(err instanceof Error ? err.message : 'Произошла ошибка при сбросе базы данных');
-  //   }
-  // };
-
-  const handleExport = async (format: 'csv' | 'excel') => {
     try {
-        const queryParams = new URLSearchParams();
-        if (dateFilter.from) queryParams.append('from', dateFilter.from);
-        if (dateFilter.to) queryParams.append('to', dateFilter.to);
-        if (nameFilter) queryParams.append('name', nameFilter);
-        queryParams.append('format', format);
-
-        const response = await api.getWithHeaders(
-            `${API_ENDPOINTS.RESULTS}?${queryParams.toString()}`,
-            {
-                'Accept': format === 'excel' 
-                    ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                    : 'text/csv'
-            }
-        );
-
-        if (!response.ok) {
-            if (response.status === 401 || response.status === 403) {
-                setIsAuthenticated(false);
-                localStorage.removeItem('adminToken');
-                throw new Error('Необходима авторизация');
-            }
-
-            const contentType = response.headers.get('content-type');
-            let errorMessage;
-            
-            if (contentType && contentType.includes('application/json')) {
-                const errorData = await response.json();
-                errorMessage = errorData.error || 'Неизвестная ошибка';
-            } else {
-                errorMessage = await response.text();
-            }
-            
-            throw new Error(errorMessage || 'Не удалось экспортировать результаты');
-        }
-
-        const blob = await response.blob();
-        if (blob.size === 0) {
-            throw new Error('Получен пустой файл');
-        }
-
-        const contentDisposition = response.headers.get('content-disposition');
-        const filename = contentDisposition
-            ? contentDisposition.split('filename=')[1].replace(/"/g, '')
-            : `test_results.${format === 'excel' ? 'xlsx' : format}`;
-
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.style.display = 'none';
-        a.href = url;
-        a.download = filename;
+        const response = await api.delete<DatabaseResponse>(`${API_ENDPOINTS.RESULTS}/${id}`);
+        console.log('Delete response:', response);
         
-        document.body.appendChild(a);
-        a.click();
-        
-        setTimeout(() => {
-            document.body.removeChild(a);
-            window.URL.revokeObjectURL(url);
-        }, 100);
-
-        setError('');
+        if (response.success) {
+            await fetchResults(); // Refresh the list after successful deletion
+            setError('');
+        }
     } catch (err: any) {
-        console.error('Export error:', err);
-        setError(err instanceof Error ? err.message : 'Произошла ошибка при экспорте');
+        console.error('Error in handleDeleteResult:', err);
+        if (err.status === 401) {
+            setIsAuthenticated(false);
+            localStorage.removeItem('adminToken');
+            setError('Сессия истекла. Пожалуйста, войдите снова.');
+        } else {
+            setError(err instanceof Error ? err.message : 'Произошла ошибка при удалении результата');
+        }
     }
 };
 
 
-  const handleResetDatabase = async () => {
-    if (!window.confirm('Вы уверены, что хотите сбросить базу данных? Это действие нельзя отменить!')) {
-      return;
-    }
-  
-    try {
-      const response = await api.post(API_ENDPOINTS.ADMIN_RESET_DB, {});
-  
-      if (!response.ok) {
-        if (response.status === 401 || response.status === 403) {
+const handleExport = async (format: 'csv' | 'excel') => {
+  try {
+      const queryParams = new URLSearchParams();
+      if (dateFilter.from) queryParams.append('from', dateFilter.from);
+      if (dateFilter.to) queryParams.append('to', dateFilter.to);
+      if (nameFilter) queryParams.append('name', nameFilter);
+      queryParams.append('format', format);
+
+      const headers = {
+          'Accept': format === 'excel' 
+              ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+              : 'text/csv'
+      };
+
+      const response = await api.getWithHeaders(
+          `${API_ENDPOINTS.RESULTS}?${queryParams.toString()}`,
+          headers
+      );
+
+      const blob = await response.blob();
+      if (blob.size === 0) {
+          throw new Error('Получен пустой файл');
+      }
+
+      const contentDisposition = response.headers.get('content-disposition');
+      const filename = contentDisposition
+          ? contentDisposition.split('filename=')[1].replace(/"/g, '')
+          : `test_results.${format === 'excel' ? 'xlsx' : format}`;
+
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+      a.download = filename;
+      
+      document.body.appendChild(a);
+      a.click();
+      
+      setTimeout(() => {
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(url);
+      }, 100);
+
+      setError('');
+  } catch (err: any) {
+      console.error('Export error:', err);
+      if (err.status === 401) {
           setIsAuthenticated(false);
           localStorage.removeItem('adminToken');
-          throw new Error('Необходима авторизация');
-        }
-  
-        const contentType = response.headers.get('content-type');
-        let errorMessage;
-        
-        if (contentType && contentType.includes('application/json')) {
-          const errorData = await response.json();
-          errorMessage = errorData.error || 'Неизвестная ошибка';
-        } else {
-          errorMessage = await response.text();
-        }
-        
-        throw new Error(errorMessage);
+          setError('Сессия истекла. Пожалуйста, войдите снова.');
+      } else {
+          setError(err instanceof Error ? err.message : 'Произошла ошибка при экспорте');
       }
-  
-      const data = await response.json();
+  }
+};
+
+const handleResetDatabase = async () => {
+  if (!window.confirm('Вы уверены, что хотите сбросить базу данных? Это действие нельзя отменить!')) {
+      return;
+  }
+
+  try {
+      const data = await api.post<DatabaseResponse>(API_ENDPOINTS.ADMIN_RESET_DB, {});
       console.log('Reset response:', data);
-  
+      
       await fetchResults();
       setError('');
-    } catch (err: any) {
+  } catch (err: any) {
       console.error('Error in handleResetDatabase:', err);
-      setError(err instanceof Error ? err.message : 'Произошла ошибка при сбросе базы данных');
-    }
-  };
-
-
-
-
-
-
-
-
-
-
-
-
-  // const handleReinitDatabase = async () => {
-  //   if (!window.confirm('Вы уверены, что хотите реинициализировать базу данных? Это пересоздаст все таблицы с новой схемой. Все данные будут потеряны!')) {
-  //     return;
-  //   }
-
-  //   try {
-  //     const token = localStorage.getItem('adminToken');
-  //     if (!token) {
-  //       setError('Необходима авторизация');
-  //       return;
-  //     }
-
-  //     const response = await fetch(getApiUrl('ADMIN_REINIT_DB'), {
-  //       method: 'POST',
-  //       headers: {
-  //         'Authorization': `Bearer ${token}`,
-  //         'Accept': 'application/json',
-  //         'Content-Type': 'application/json'
-  //       }
-  //     });
-
-  //     if (!response.ok) {
-  //       if (response.status === 401 || response.status === 403) {
-  //         setIsAuthenticated(false);
-  //         localStorage.removeItem('adminToken');
-  //         throw new Error('Необходима авторизация');
-  //       }
-
-  //       const contentType = response.headers.get('content-type');
-  //       let errorMessage;
-        
-  //       if (contentType && contentType.includes('application/json')) {
-  //         const errorData = await response.json();
-  //         errorMessage = errorData.error || 'Неизвестная ошибка';
-  //       } else {
-  //         errorMessage = await response.text();
-  //       }
-        
-  //       throw new Error(errorMessage);
-  //     }
-
-  //     const data = await response.json();
-  //     console.log('Reinit response:', data);
-
-  //     await fetchResults();
-  //     setError('');
-  //   } catch (err) {
-  //     console.error('Error in handleReinitDatabase:', err);
-  //     setError(err instanceof Error ? err.message : 'Произошла ошибка при реинициализации базы данных');
-  //   }
-  // };
-
-
-
-  const handleReinitDatabase = async () => {
-    if (!window.confirm('Вы уверены, что хотите реинициализировать базу данных? Это пересоздаст все таблицы с новой схемой. Все данные будут потеряны!')) {
-      return;
-    }
-  
-    try {
-      const response = await api.post(API_ENDPOINTS.ADMIN_REINIT_DB, {});
-  
-      if (!response.ok) {
-        if (response.status === 401 || response.status === 403) {
+      if (err.status === 401) {
           setIsAuthenticated(false);
           localStorage.removeItem('adminToken');
-          throw new Error('Необходима авторизация');
-        }
-  
-        const contentType = response.headers.get('content-type');
-        let errorMessage;
-        
-        if (contentType && contentType.includes('application/json')) {
-          const errorData = await response.json();
-          errorMessage = errorData.error || 'Неизвестная ошибка';
-        } else {
-          errorMessage = await response.text();
-        }
-        
-        throw new Error(errorMessage);
+          setError('Необходима авторизация');
+      } else {
+          setError(err instanceof Error ? err.message : 'Произошла ошибка при сбросе базы данных');
       }
-  
-      const data = await response.json();
+  }
+};
+
+
+
+
+const handleReinitDatabase = async () => {
+  if (!window.confirm('Вы уверены, что хотите реинициализировать базу данных? Это пересоздаст все таблицы с новой схемой. Все данные будут потеряны!')) {
+      return;
+  }
+
+  try {
+      const data = await api.post<DatabaseResponse>(API_ENDPOINTS.ADMIN_REINIT_DB, {});
       console.log('Reinit response:', data);
-  
+      
       await fetchResults();
       setError('');
-    } catch (err: any) {
+  } catch (err: any) {
       console.error('Error in handleReinitDatabase:', err);
-      setError(err instanceof Error ? err.message : 'Произошла ошибка при реинициализации базы данных');
-    }
-  };
-
+      if (err.status === 401) {
+          setIsAuthenticated(false);
+          localStorage.removeItem('adminToken');
+          setError('Необходима авторизация');
+      } else {
+          setError(err instanceof Error ? err.message : 'Произошла ошибка при реинициализации базы данных');
+      }
+  }
+};
 
 
 
