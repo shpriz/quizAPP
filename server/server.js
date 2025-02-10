@@ -106,8 +106,12 @@ app.use((err, req, res, next) => {
 });
 
 // Start the server
-app.listen(PORT, () => {
-    logger.info(`Server is running on port ${PORT}`);
+app.listen(PORT, '0.0.0.0', (err) => {
+  if (err) {
+      logger.error('Error starting server:', err);
+      process.exit(1);
+  }
+  logger.info(`Server is running on port ${PORT}`);
 });
 
 
