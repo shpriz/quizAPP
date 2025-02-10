@@ -15,36 +15,48 @@ const PORT = process.env.PORT || 3002;
 
 // Configuration
 const currentConfig = {
-    allowedOrigins: [
-        'http://localhost:3000',
-        'http://194.87.69.156:3000',
-        'http://194.87.69.156:3002',
-        'http://194.87.69.156'
-    ],
-    port: PORT,
-    databasePath: path.join(__dirname, 'data', 'quiz-data.json'),
-    verbose: isDevelopment
+  allowedOrigins: [
+      'http://localhost:3000',
+      'http://194.87.69.156:3000',
+      'http://194.87.69.156:3002',
+      'http://194.87.69.156',
+      'https://stomtest.nsmu.ru'
+  ],
+  port: PORT,
+  databasePath: path.join(__dirname, 'data', 'quiz-data.json'),
+  verbose: isDevelopment
 };
 
 // CORS configuration
 app.use(cors({
-    origin: function(origin, callback) {
-        if (!origin || currentConfig.allowedOrigins.includes(origin)) {
-            callback(null, true);
-        } else {
-            callback(new Error('Not allowed by CORS'));
-        }
-    },
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: [
-        'Content-Type', 
-        'Authorization', 
-        'X-Requested-With',
-        'Accept',
-        'Origin'
-    ],
-    credentials: true,
-    maxAge: 86400
+  origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) {
+          return callback(null, true);
+      }
+
+      const originUrl = new URL(origin);
+      const isAllowed = currentConfig.allowedOrigins.some(allowed => 
+          origin === allowed || originUrl.hostname === new URL(allowed).hostname
+      );
+
+      if (isAllowed) {
+          callback(null, true);
+      } else {
+          logger.warn(`Blocked request from unauthorized origin: ${origin}`);
+          callback(new Error('CORS not allowed'));
+      }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: [
+      'Content-Type', 
+      'Authorization', 
+      'X-Requested-With',
+      'Accept',
+      'Origin'
+  ],
+  credentials: true,
+  maxAge: 86400
 }));
 
 app.use(express.json());
@@ -87,6 +99,13 @@ process.on('uncaughtException', (err) => {
 
 process.on('unhandledRejection', (reason, promise) => {
     logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+app.use((err, req, res, next) => {
+  logger.error('Error:', err);
+  res.status(500).json({
+      error: isDevelopment ? err.message : 'Internal Server Error'
+  });
 });
 
 // Start the server
