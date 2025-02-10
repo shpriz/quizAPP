@@ -1041,14 +1041,14 @@ function formatDate(dateStr) {
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
-  try {
-    // Try a simple database query
-    db.get('SELECT 1');
-    res.json({ status: 'healthy', message: 'Service is running' });
-  } catch (error) {
-    logger.error('Health check failed:', error);
-    res.status(500).json({ status: 'unhealthy', message: error.message });
-  }
+  db.get('SELECT 1', (err) => {
+      if (err) {
+          logger.error('Database health check failed:', err);
+          res.status(500).json({ status: 'error', message: 'Database connection failed' });
+          return;
+      }
+      res.json({ status: 'ok' });
+  });
 });
 
 // Error handling middleware
