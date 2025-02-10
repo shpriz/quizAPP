@@ -8,34 +8,47 @@ export const API_ENDPOINTS = {
   ADMIN_REINIT_DB: '/admin/reinit-db'
 };
 
-export const api = {
-  get: async (url: string) => {
-    const response = await fetch(`${API_BASE_URL}${url}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
-        'Content-Type': 'application/json',
-      },
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    return response;
-  },
 
-  post: async (url: string, data: any) => {
-    const response = await fetch(`${API_BASE_URL}${url}`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    return response;
-  },
+interface ApiError extends Error {
+    status?: number;
+    data?: any;
+  }
+
+
+  export const api = {
+    get: async <T>(url: string): Promise<T> => {
+        const response = await fetch(`${API_BASE_URL}${url}`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
+            'Content-Type': 'application/json',
+          },
+        });
+        if (!response.ok) {
+            const error = new Error(`HTTP error! status: ${response.status}`) as ApiError;
+            error.status = response.status;
+            error.data = await response.json().catch(() => null);
+            throw error;
+        }
+        return response.json();
+    },
+
+    post: async <T>(url: string, data: any): Promise<T> => {
+        const response = await fetch(`${API_BASE_URL}${url}`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data),
+        });
+        if (!response.ok) {
+            const error = new Error(`HTTP error! status: ${response.status}`) as ApiError;
+            error.status = response.status;
+            error.data = await response.json().catch(() => null);
+            throw error;
+        }
+        return response.json();
+    },
 
   delete: async (url: string) => {
     const response = await fetch(`${API_BASE_URL}${url}`, {
