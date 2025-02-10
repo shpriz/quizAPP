@@ -112,31 +112,6 @@ app.listen(PORT, () => {
 
 
 
-// Initialize database
-const dbPath = path.join(__dirname, 'data', 'quiz.db');
-const dbDir = path.dirname(dbPath);
-
-if (!fs.existsSync(dbDir)) {
-  fs.mkdirSync(dbDir, { recursive: true });
-}
-
-let db;
-try {
-  db = new sqlite3.Database(dbPath, (err) => {
-    if (err) {
-      logger.error('Error opening database:', err);
-      throw err;
-    }
-    logger.info('Connected to SQLite database');
-    
-    // Enable foreign keys
-    db.run('PRAGMA foreign_keys = ON');
-  });
-} catch (error) {
-  logger.error('Error initializing database:', error);
-  throw error;
-}
-
 // Calculate overall result level based on total score
 function calculateOverallResult(totalScore) {
   if (totalScore >= 99) {
@@ -155,68 +130,83 @@ function calculateOverallResult(totalScore) {
 }
 
 // Database initialization - only called from admin panel
-function initializeDatabase() {
+const initializeDatabase = async () => {
+  const dbDir = path.join(__dirname, 'data');
+  const dbPath = path.join(dbDir, 'quiz.db');
+
+  // Create data directory if it doesn't exist
+  if (!fs.existsSync(dbDir)) {
+    fs.mkdirSync(dbDir, { recursive: true });
+  }
+
   return new Promise((resolve, reject) => {
     try {
-      // Drop existing tables in reverse order of dependencies
-      const dropTables = [
-        'DROP TABLE IF EXISTS detailed_answers',
-        'DROP TABLE IF EXISTS section_scores',
-        'DROP TABLE IF EXISTS quiz_results'
-      ];
-
-      const createTables = `
-        CREATE TABLE IF NOT EXISTS quiz_results (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          first_name TEXT NOT NULL,
-          last_name TEXT NOT NULL,
-          total_score REAL NOT NULL,
-          overall_result TEXT,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS section_scores (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          result_id INTEGER NOT NULL,
-          section_name TEXT NOT NULL,
-          score REAL NOT NULL,
-          FOREIGN KEY (result_id) REFERENCES quiz_results(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE IF NOT EXISTS detailed_answers (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          result_id INTEGER NOT NULL,
-          question_id INTEGER NOT NULL,
-          question_text TEXT,
-          answer_text TEXT,
-          answer_index INTEGER,
-          possible_score REAL,
-          score REAL,
-          FOREIGN KEY (result_id) REFERENCES quiz_results(id) ON DELETE CASCADE
-        );
-      `;
-
-      db.serialize(() => {
-        dropTables.forEach(sql => {
-          db.run(sql);
-        });
+      const db = new sqlite3.Database(dbPath, async (err) => {
+        if (err) {
+          logger.error('Error opening database:', err);
+          reject(err);
+          return;
+        }
         
-        db.exec(createTables, (err) => {
-          if (err) {
-            logger.error('Error creating tables:', err);
-            reject(err);
-          } else {
-            logger.info('Database tables created successfully');
-            resolve();
-          }
+        logger.info('Connected to SQLite database');
+        
+        // Enable foreign keys
+        db.run('PRAGMA foreign_keys = ON');
+
+        // Create tables in series
+        await new Promise((resolve, reject) => {
+          db.serialize(() => {
+            db.run(`
+              CREATE TABLE IF NOT EXISTS results (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                first_name TEXT NOT NULL,
+                last_name TEXT NOT NULL,
+                group_name TEXT,
+                total_score INTEGER NOT NULL,
+                answers TEXT,
+                completion_date DATETIME DEFAULT CURRENT_TIMESTAMP
+              )
+            `, (err) => {
+              if (err) {
+                logger.error('Error creating results table:', err);
+                reject(err);
+              }
+            });
+
+            db.run(`
+              CREATE TABLE IF NOT EXISTS section_scores (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                result_id INTEGER,
+                section_title TEXT NOT NULL,
+                score INTEGER NOT NULL,
+                max_score INTEGER NOT NULL,
+                FOREIGN KEY (result_id) REFERENCES results (id)
+              )
+            `);
+
+            db.run(`
+              CREATE TABLE IF NOT EXISTS detailed_answers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                result_id INTEGER,
+                section_title TEXT NOT NULL,
+                question_text TEXT NOT NULL,
+                answer_text TEXT NOT NULL,
+                score INTEGER NOT NULL,
+                FOREIGN KEY (result_id) REFERENCES results (id)
+              )
+            `);
+          });
+          resolve();
         });
+
+        resolve(db);
       });
     } catch (error) {
       logger.error('Error initializing database:', error);
       reject(error);
     }
   });
-}
+};
 
 function calculateTestResult(testNumber, score) {
   // Блок 1: "Уход за полостью рта у жителей психоневрологических интернатов"
