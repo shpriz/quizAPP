@@ -15,46 +15,54 @@ const PORT = process.env.PORT || 3002;
 
 // Configuration
 const currentConfig = {
-    allowedOrigins: [
-        'http://localhost:3000',
-        'http://194.87.69.156:3000',
-        'http://194.87.69.156:3002',
-        'http://194.87.69.156'
-    ],
-    port: PORT,
-    databasePath: path.join(__dirname, 'data', 'quiz-data.json'),
-    verbose: isDevelopment
+  allowedOrigins: [
+    'http://localhost:3000',
+    'http://194.87.69.156:3000'
+],
+  port: PORT,
+  databasePath: path.join(__dirname, 'data', 'quiz-data.json'),
+  verbose: isDevelopment
 };
 
 // CORS configuration
 app.use(cors({
-    origin: function(origin, callback) {
-        if (!origin || currentConfig.allowedOrigins.includes(origin)) {
-            callback(null, true);
-        } else {
-            callback(new Error('Not allowed by CORS'));
-        }
-    },
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: [
-        'Content-Type', 
-        'Authorization', 
-        'X-Requested-With',
-        'Accept',
-        'Origin'
-    ],
-    credentials: true,
-    maxAge: 86400
+  origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) {
+          return callback(null, true);
+      }
+
+      const originUrl = new URL(origin);
+      const isAllowed = currentConfig.allowedOrigins.some(allowed => 
+          origin === allowed || originUrl.hostname === new URL(allowed).hostname
+      );
+
+      if (isAllowed) {
+          callback(null, true);
+      } else {
+          logger.warn(`Blocked request from unauthorized origin: ${origin}`);
+          callback(new Error('CORS not allowed'));
+      }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: [
+      'Content-Type', 
+      'Authorization', 
+      'X-Requested-With',
+      'Accept',
+      'Origin'
+  ],
+  credentials: true,
+  maxAge: 86400
 }));
 
 app.use(express.json());
-app.use(requestLogger);  // Add request logging middleware
+app.use(requestLogger);
 app.use('/api', express.Router());
-
 
 // Логирование всех запросов (только в development)
 if (isDevelopment) {
-  app.use((req, next) => {
+  app.use((req, res, next) => {
     logger.info(`${new Date().toISOString()} ${req.method} ${req.url}`);
     next();
   });
@@ -63,27 +71,46 @@ if (isDevelopment) {
 // Load quiz data from JSON file
 let quizData;
 try {
-// Обновите путь к файлу с вопросами
-  const quizDataPath = path.join(__dirname, 'data', 'quiz-data.json');
-  logger.info('Loading quiz data from:', quizDataPath);
+    const quizDataPath = currentConfig.databasePath;
+    logger.info(`Loading quiz data from: ${quizDataPath}`);
 
+    if (!fs.existsSync(quizDataPath)) {
+        logger.error(`Quiz data file not found: ${quizDataPath}`);
+        throw new Error('Quiz data file not found');
+    }
 
-  if (!fs.existsSync(quizDataPath)) {
-    logger.error('Quiz data file not found:', quizDataPath);
-    throw new Error('Quiz data file not found');
-  }
-  
-  const fileContent = fs.readFileSync(quizDataPath, 'utf8');
-  if (isDevelopment) {
-    logger.info('Quiz data file content length:', fileContent.length);
-  }
-  
-  quizData = JSON.parse(fileContent);
-  logger.info('Quiz data loaded successfully. Number of sections:', quizData.length);
+    const fileContent = fs.readFileSync(quizDataPath, 'utf8');
+    logger.info(`Quiz data file content length: ${fileContent.length}`);
+
+    quizData = JSON.parse(fileContent);
+    logger.info(`Quiz data loaded successfully. Number of sections: ${quizData.length}`);
 } catch (error) {
-  logger.error('Error loading quiz data:', error);
-  quizData = [];
+    logger.error('Error loading quiz data:', error);
+    quizData = [];
 }
+
+// Global error handling
+process.on('uncaughtException', (err) => {
+    logger.error('Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+app.use((err, req, res, next) => {
+  logger.error('Error:', err);
+  res.status(500).json({
+      error: isDevelopment ? err.message : 'Internal Server Error'
+  });
+});
+
+// Start the server
+app.listen(PORT, () => {
+    logger.info(`Server is running on port ${PORT}`);
+});
+
+
 
 // Initialize database
 const dbPath = path.join(__dirname, 'data', 'quiz.db');
@@ -1030,14 +1057,14 @@ function formatDate(dateStr) {
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
-  try {
-    // Try a simple database query
-    db.get('SELECT 1');
-    res.json({ status: 'healthy', message: 'Service is running' });
-  } catch (error) {
-    logger.error('Health check failed:', error);
-    res.status(500).json({ status: 'unhealthy', message: error.message });
-  }
+  db.get('SELECT 1', (err) => {
+      if (err) {
+          logger.error('Database health check failed:', err);
+          res.status(500).json({ status: 'error', message: 'Database connection failed' });
+          return;
+      }
+      res.json({ status: 'ok' });
+  });
 });
 
 // Error handling middleware

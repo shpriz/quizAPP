@@ -25,6 +25,9 @@ services:
       - PORT=3002
       - JWT_SECRET=your-secret-key
       - CORS_ORIGIN=http://194.87.69.156
+    volumes:
+      - ./server:/app/server
+      - ./server/data:/app/data
     networks:
       - app-network
     container_name: backend_upstream
