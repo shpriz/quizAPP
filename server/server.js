@@ -106,7 +106,7 @@ app.use((err, req, res, next) => {
 });
 
 // Start the server
-app.listen(PORT, '0.0.0.0', (err) => {
+app.listen(PORT, (err) => {
   if (err) {
       logger.error('Error starting server:', err);
       process.exit(1);
