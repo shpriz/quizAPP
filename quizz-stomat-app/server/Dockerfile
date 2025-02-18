@@ -1,31 +1,32 @@
-FROM node:22
+# Use Node.js Alpine image
+FROM node:20-alpine
 
-WORKDIR /usr/src/app
+# Set working directory
+WORKDIR /app
 
-# Install build dependencies
-RUN apt-get update && \
-    apt-get install -y \
-    python3 \
-    make \
-    g++ \
-    sqlite3 \
-    build-essential
+# Install system dependencies
+RUN apk add --no-cache python3 make g++ curl
 
-# Set environment variables for better-sqlite3 build
-ENV CFLAGS="-std=c++20"
-ENV CXXFLAGS="-std=c++20"
-
+# Copy package files
 COPY package*.json ./
 
 # Install dependencies
-RUN npm install
+RUN npm install --omit=dev
 
-# Install nodemon globally
-RUN npm install -g nodemon
-
+# Copy application code
 COPY . .
 
+# Create data and logs directories and set permissions
+RUN mkdir -p /app/data /app/logs && \
+    chown -R node:node /app
+
+# Switch to non-root user
+USER node
+
+# Expose port
 EXPOSE 3002
 
-# Start server with nodemon
-CMD ["npm", "start"]
+# Start the application
+CMD ["node", "server.js"]  
+
+

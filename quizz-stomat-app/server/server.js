@@ -1,127 +1,216 @@
 const express = require('express');
 const cors = require('cors');
-const Database = require('better-sqlite3');
+const sqlite3 = require('sqlite3').verbose();
 const fs = require('fs');
 const path = require('path');
-const ExcelJS = require('exceljs');
 const jwt = require('jsonwebtoken');
-const XLSX = require('xlsx');
+const ExcelJS = require('exceljs');
+const { logger, requestLogger } = require('./logger');
 
 const app = express();
-app.use(cors());
+
+// Environment variables and configuration
+const isDevelopment = process.env.NODE_ENV === 'development';
+const PORT = process.env.PORT || 3002;
+
+// Configuration
+const currentConfig = {
+  allowedOrigins: [
+    'http://localhost:3000',
+    'http://194.87.69.156:3000'
+],
+  port: PORT,
+  databasePath: path.join(__dirname, 'data', 'quiz-data.json'),
+  verbose: isDevelopment
+};
+
+// CORS configuration
+app.use(cors({
+  origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) {
+          return callback(null, true);
+      }
+
+      const originUrl = new URL(origin);
+      const isAllowed = currentConfig.allowedOrigins.some(allowed => 
+          origin === allowed || originUrl.hostname === new URL(allowed).hostname
+      );
+
+      if (isAllowed) {
+          callback(null, true);
+      } else {
+          logger.warn(`Blocked request from unauthorized origin: ${origin}`);
+          callback(new Error('CORS not allowed'));
+      }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: [
+      'Content-Type', 
+      'Authorization', 
+      'X-Requested-With',
+      'Accept',
+      'Origin'
+  ],
+  credentials: true,
+  maxAge: 86400
+}));
+
 app.use(express.json());
+app.use(requestLogger);
+app.use('/api', express.Router());
 
-// Read quiz data from JSON file
-const quizData = JSON.parse(fs.readFileSync(path.join(__dirname, 'quiz-data.json'), 'utf8'));
-
-// Initialize database
-const dbPath = path.join(__dirname, 'data', 'quiz.db');
-const dbDir = path.dirname(dbPath);
-
-// Create data directory if it doesn't exist
-if (!fs.existsSync(dbDir)) {
-  fs.mkdirSync(dbDir, { recursive: true });
+// Логирование всех запросов (только в development)
+if (isDevelopment) {
+  app.use((req, res, next) => {
+    logger.info(`${new Date().toISOString()} ${req.method} ${req.url}`);
+    next();
+  });
 }
 
-const db = new Database(dbPath);
+// Load quiz data from JSON file
+let quizData;
+try {
+    const quizDataPath = currentConfig.databasePath;
+    logger.info(`Loading quiz data from: ${quizDataPath}`);
 
-// Create tables if they don't exist
-db.exec(`
-  CREATE TABLE IF NOT EXISTS quiz_results (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    first_name TEXT NOT NULL,
-    last_name TEXT NOT NULL,
-    total_score INTEGER NOT NULL,
-    test1_score INTEGER,
-    test2_score INTEGER,
-    test3_score INTEGER,
-    test4_score INTEGER,
-    test1_result TEXT,
-    test2_result TEXT,
-    test3_result TEXT,
-    test4_result TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
+    if (!fs.existsSync(quizDataPath)) {
+        logger.error(`Quiz data file not found: ${quizDataPath}`);
+        throw new Error('Quiz data file not found');
+    }
 
-  CREATE TABLE IF NOT EXISTS section_scores (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    result_id INTEGER NOT NULL,
-    section_title TEXT NOT NULL,
-    score INTEGER NOT NULL,
-    max_score INTEGER NOT NULL,
-    section_result TEXT NOT NULL,
-    FOREIGN KEY (result_id) REFERENCES quiz_results(id)
-  );
+    const fileContent = fs.readFileSync(quizDataPath, 'utf8');
+    logger.info(`Quiz data file content length: ${fileContent.length}`);
 
-  CREATE TABLE IF NOT EXISTS detailed_answers (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    result_id INTEGER NOT NULL,
-    section_title TEXT NOT NULL,
-    question_id INTEGER NOT NULL,
-    question_text TEXT NOT NULL,
-    answer_text TEXT NOT NULL,
-    answer_index INTEGER NOT NULL,
-    possible_score INTEGER NOT NULL,
-    score INTEGER NOT NULL,
-    FOREIGN KEY (result_id) REFERENCES quiz_results(id)
-  );
-`);
+    quizData = JSON.parse(fileContent);
+    logger.info(`Quiz data loaded successfully. Number of sections: ${quizData.length}`);
+} catch (error) {
+    logger.error('Error loading quiz data:', error);
+    quizData = [];
+}
 
-// Initialize database tables - only called from admin panel
-async function initializeDatabase() {
-  try {
-    // Drop existing tables
-    db.exec('DROP TABLE IF EXISTS detailed_answers');
-    db.exec('DROP TABLE IF EXISTS section_scores');
-    db.exec('DROP TABLE IF EXISTS quiz_results');
+// Global error handling
+process.on('uncaughtException', (err) => {
+    logger.error('Uncaught Exception:', err);
+});
 
-    // Create tables with updated schema
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS quiz_results (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        first_name TEXT NOT NULL,
-        last_name TEXT NOT NULL,
-        total_score INTEGER NOT NULL,
-        test1_score INTEGER,
-        test2_score INTEGER,
-        test3_score INTEGER,
-        test4_score INTEGER,
-        test1_result TEXT,
-        test2_result TEXT,
-        test3_result TEXT,
-        test4_result TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      );
+process.on('unhandledRejection', (reason, promise) => {
+    logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
 
-      CREATE TABLE IF NOT EXISTS section_scores (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        result_id INTEGER NOT NULL,
-        section_title TEXT NOT NULL,
-        score INTEGER NOT NULL,
-        max_score INTEGER NOT NULL,
-        section_result TEXT NOT NULL,
-        FOREIGN KEY (result_id) REFERENCES quiz_results(id)
-      );
+app.use((err, req, res, next) => {
+  logger.error('Error:', err);
+  res.status(500).json({
+      error: isDevelopment ? err.message : 'Internal Server Error'
+  });
+});
 
-      CREATE TABLE IF NOT EXISTS detailed_answers (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        result_id INTEGER NOT NULL,
-        section_title TEXT NOT NULL,
-        question_id INTEGER NOT NULL,
-        question_text TEXT NOT NULL,
-        answer_text TEXT NOT NULL,
-        answer_index INTEGER NOT NULL,
-        possible_score INTEGER NOT NULL,
-        score INTEGER NOT NULL,
-        FOREIGN KEY (result_id) REFERENCES quiz_results(id)
-      );
-    `);
+// Start the server
+app.listen(PORT, (err) => {
+  if (err) {
+      logger.error('Error starting server:', err);
+      process.exit(1);
+  }
+  logger.info(`Server is running on port ${PORT}`);
+});
 
-    console.log('Database tables recreated successfully');
-  } catch (error) {
-    console.error('Error initializing database:', error);
+
+
+// Calculate overall result level based on total score
+function calculateOverallResult(totalScore) {
+  if (totalScore >= 99) {
+    return 'Очень плохой уровень осуществления гигиены полости рта, оказания стоматологической помощи и поддержания здорового образа жизни людей, проживающих в психоневрологических интернатах, в рамках сестринского ухода';
+  } else if (totalScore >= 83) {
+    return 'Плохой уровень осуществления гигиены полости рта, оказания стоматологической помощи и поддержания здорового образа жизни людей, проживающих в психоневрологических интернатах, в рамках сестринского ухода';
+  } else if (totalScore >= 67) {
+    return 'Неудовлетворительный уровень осуществления гигиены полости рта, оказания стоматологической помощи и поддержания здорового образа жизни людей, проживающих в психоневрологических интернатах, в рамках сестринского ухода';
+  } else if (totalScore >= 51) {
+    return 'Удовлетворительный уровень осуществления гигиены полости рта, оказания стоматологической помощи и поддержания здорового образа жизни людей, проживающих в психоневрологических интернатах, в рамках сестринского ухода';
+  } else if (totalScore >= 35) {
+    return 'Высокий уровень осуществления гигиены полости рта, оказания стоматологической помощи и поддержания здорового образа жизни людей, проживающих в психоневрологических интернатах, в рамках сестринского ухода';
+  } else {
+    return 'Недостаточно баллов для оценки';
   }
 }
+
+// Database initialization - only called from admin panel
+const initializeDatabase = async () => {
+  const dbDir = path.join(__dirname, 'data');
+  const dbPath = path.join(dbDir, 'quiz.db');
+
+  // Create data directory if it doesn't exist
+  if (!fs.existsSync(dbDir)) {
+    fs.mkdirSync(dbDir, { recursive: true });
+  }
+
+  return new Promise((resolve, reject) => {
+    try {
+      const db = new sqlite3.Database(dbPath, async (err) => {
+        if (err) {
+          logger.error('Error opening database:', err);
+          reject(err);
+          return;
+        }
+        
+        logger.info('Connected to SQLite database');
+        
+        // Enable foreign keys
+        db.run('PRAGMA foreign_keys = ON');
+
+        // Create tables in series
+        await new Promise((resolve, reject) => {
+          db.serialize(() => {
+            db.run(`
+              CREATE TABLE IF NOT EXISTS results (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                first_name TEXT NOT NULL,
+                last_name TEXT NOT NULL,
+                group_name TEXT,
+                total_score INTEGER NOT NULL,
+                answers TEXT,
+                completion_date DATETIME DEFAULT CURRENT_TIMESTAMP
+              )
+            `, (err) => {
+              if (err) {
+                logger.error('Error creating results table:', err);
+                reject(err);
+              }
+            });
+
+            db.run(`
+              CREATE TABLE IF NOT EXISTS section_scores (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                result_id INTEGER,
+                section_title TEXT NOT NULL,
+                score INTEGER NOT NULL,
+                max_score INTEGER NOT NULL,
+                FOREIGN KEY (result_id) REFERENCES results (id)
+              )
+            `);
+
+            db.run(`
+              CREATE TABLE IF NOT EXISTS detailed_answers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                result_id INTEGER,
+                section_title TEXT NOT NULL,
+                question_text TEXT NOT NULL,
+                answer_text TEXT NOT NULL,
+                score INTEGER NOT NULL,
+                FOREIGN KEY (result_id) REFERENCES results (id)
+              )
+            `);
+          });
+          resolve();
+        });
+
+        resolve(db);
+      });
+    } catch (error) {
+      logger.error('Error initializing database:', error);
+      reject(error);
+    }
+  });
+};
 
 function calculateTestResult(testNumber, score) {
   // Блок 1: "Уход за полостью рта у жителей психоневрологических интернатов"
@@ -175,310 +264,566 @@ function calculateTestResult(testNumber, score) {
   return 'Нет данных';
 }
 
-async function exportToExcel(results) {
-  const workbook = new ExcelJS.Workbook();
-  const worksheet = workbook.addWorksheet('Quiz Results');
+async function exportToCSV(results) {
+  // Headers
+  const headers = [
+    'ID',
+    'Фамилия',
+    'Имя',
+    'Дата',
+    'Общий балл',
+    'Общий результат',
 
-  worksheet.columns = [
-    { header: 'Имя', key: 'firstName', width: 15 },
-    { header: 'Фамилия', key: 'lastName', width: 15 },
-    { header: 'Дата', key: 'date', width: 20 },
-    { header: 'Тест 1 (Баллы)', key: 'test1Score', width: 15 },
-    { header: 'Тест 1 (Результат)', key: 'test1Result', width: 50 },
-    { header: 'Тест 2 (Баллы)', key: 'test2Score', width: 15 },
-    { header: 'Тест 2 (Результат)', key: 'test2Result', width: 50 },
-    { header: 'Тест 3 (Баллы)', key: 'test3Score', width: 15 },
-    { header: 'Тест 3 (Результат)', key: 'test3Result', width: 50 },
-    { header: 'Тест 4 (Баллы)', key: 'test4Score', width: 15 },
-    { header: 'Тест 4 (Результат)', key: 'test4Result', width: 50 }
-  ];
+    // Block 1
+    'Блок 1 (балл)',
+    'Блок 1 (результат)',
+    'Вопрос 1.1',
+    'Ответ 1.1',
+    'Балл 1.1',
+    'Вопрос 1.2',
+    'Ответ 1.2',
+    'Балл 1.2',
+    'Вопрос 1.3',
+    'Ответ 1.3',
+    'Балл 1.3',
+    'Вопрос 1.4',
+    'Ответ 1.4',
+    'Балл 1.4',
+    'Вопрос 1.5',
+    'Ответ 1.5',
+    'Балл 1.5',
 
-  results.forEach(result => {
-    worksheet.addRow({
-      firstName: result.first_name,
-      lastName: result.last_name,
-      date: new Date(result.created_at).toLocaleString(),
-      test1Score: result.test1_score,
-      test1Result: result.test1_result,
-      test2Score: result.test2_score,
-      test2Result: result.test2_result,
-      test3Score: result.test3_score,
-      test3Result: result.test3_result,
-      test4Score: result.test4_score,
-      test4Result: result.test4_result
+    // Block 2
+    'Блок 2 (балл)',
+    'Блок 2 (результат)',
+    'Вопрос 2.1',
+    'Ответ 2.1',
+    'Балл 2.1',
+    'Вопрос 2.2',
+    'Ответ 2.2',
+    'Балл 2.2',
+    'Вопрос 2.3',
+    'Ответ 2.3',
+    'Балл 2.3',
+    'Вопрос 2.4',
+    'Ответ 2.4',
+    'Балл 2.4',
+    'Вопрос 2.5',
+    'Ответ 2.5',
+    'Балл 2.5',
+
+    // Block 3
+    'Блок 3 (балл)',
+    'Блок 3 (результат)',
+    'Вопрос 3.1',
+    'Ответ 3.1',
+    'Балл 3.1',
+    'Вопрос 3.2',
+    'Ответ 3.2',
+    'Балл 3.2',
+    'Вопрос 3.3',
+    'Ответ 3.3',
+    'Балл 3.3',
+    'Вопрос 3.4',
+    'Ответ 3.4',
+    'Балл 3.4',
+    'Вопрос 3.5',
+    'Ответ 3.5',
+    'Балл 3.5',
+
+    // Block 4
+    'Блок 4 (балл)',
+    'Блок 4 (результат)',
+    'Вопрос 4.1',
+    'Ответ 4.1',
+    'Балл 4.1',
+    'Вопрос 4.2',
+    'Ответ 4.2',
+    'Балл 4.2',
+    'Вопрос 4.3',
+    'Ответ 4.3',
+    'Балл 4.3',
+    'Вопрос 4.4',
+    'Ответ 4.4',
+    'Балл 4.4',
+    'Вопрос 4.5',
+    'Ответ 4.5',
+    'Балл 4.5'
+  ].join(',') + '\n';
+
+  // Convert results to rows
+  const rows = results.map(result => {
+    const sectionScores = result.section_scores || {};
+    const totalScore = result.total_score || 0;
+    const detailedAnswers = result.detailed_answers || [];
+
+    // Group answers by block
+    const answersByBlock = {};
+    detailedAnswers.forEach(answer => {
+      const blockNumber = Math.floor((answer.question_id - 1) / 5) + 1;
+      const questionInBlock = ((answer.question_id - 1) % 5) + 1;
+      if (!answersByBlock[blockNumber]) {
+        answersByBlock[blockNumber] = {};
+      }
+      answersByBlock[blockNumber][questionInBlock] = answer;
     });
-  });
 
-  worksheet.getRow(1).font = { bold: true };
-  worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
-
-  const filename = path.join(__dirname, 'quiz_results.xlsx');
-  await workbook.xlsx.writeFile(filename);
-  return filename;
-}
-
-// Secret key for JWT
-const JWT_SECRET = 'your-secret-key-here';
-const ADMIN_PASSWORD = 'admin123'; // Change this to a secure password
-
-// Authentication middleware
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-
-  jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) {
-      return res.status(403).json({ error: 'Invalid token' });
-    }
-    req.user = user;
-    next();
-  });
-};
-
-app.get('/api/questions', (req, res) => {
-  try {
-    res.json(quizData);
-  } catch (error) {
-    console.error('Error serving quiz data:', error);
-    res.status(500).json({ error: 'Failed to serve quiz data' });
-  }
-});
-
-app.post('/api/results', async (req, res) => {
-  try {
-    const { firstName, lastName, totalScore, sectionScores, detailedAnswers } = req.body;
-
-    // Calculate test results for each section
-    const test1Score = sectionScores[0]?.score || 0;
-    const test2Score = sectionScores[1]?.score || 0;
-    const test3Score = sectionScores[2]?.score || 0;
-    const test4Score = sectionScores[3]?.score || 0;
-
-    const test1Result = calculateTestResult(1, test1Score);
-    const test2Result = calculateTestResult(2, test2Score);
-    const test3Result = calculateTestResult(3, test3Score);
-    const test4Result = calculateTestResult(4, test4Score);
-
-    // Insert main result
-    const insertResult = db.prepare('INSERT INTO quiz_results (first_name, last_name, total_score, test1_score, test2_score, test3_score, test4_score, test1_result, test2_result, test3_result, test4_result) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-    const result = insertResult.run(firstName, lastName, totalScore, test1Score, test2Score, test3Score, test4Score, test1Result, test2Result, test3Result, test4Result);
-
-    const resultId = result.lastInsertRowid;
-
-    // Insert section scores with results
-    const insertSectionScore = db.prepare('INSERT INTO section_scores (result_id, section_title, score, max_score, section_result) VALUES (?, ?, ?, ?, ?)');
-    for (let i = 0; i < sectionScores.length; i++) {
-      const section = sectionScores[i];
-      const sectionResult = calculateTestResult(i + 1, section.score);
-      insertSectionScore.run(resultId, section.section_title, section.score, section.max_score, sectionResult);
-    }
-
-    // Insert detailed answers
-    const insertDetailedAnswer = db.prepare('INSERT INTO detailed_answers (result_id, section_title, question_id, question_text, answer_text, answer_index, possible_score, score) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-    for (const answer of detailedAnswers) {
-      insertDetailedAnswer.run(resultId, answer.section_title, answer.question_id, answer.question_text, answer.answer_text, answer.answer_index, answer.possible_score, answer.score);
-    }
-
-    res.json({ 
-      success: true, 
-      resultId,
-      testResults: [test1Result, test2Result, test3Result, test4Result],
-      testScores: [test1Score, test2Score, test3Score, test4Score]
-    });
-  } catch (error) {
-    console.error('Error saving results:', error);
-    res.status(500).json({ error: 'Failed to save results' });
-  }
-});
-
-app.post('/api/results/excel', authenticateToken, async (req, res) => {
-  try {
-    const { startDate, endDate } = req.body;
-    let query = `
-      SELECT * FROM quiz_results 
-      WHERE 1=1
-    `;
-    const params = [];
-
-    if (startDate) {
-      query += ` AND created_at >= ?`;
-      params.push(startDate);
-    }
-    if (endDate) {
-      query += ` AND created_at <= ?`;
-      params.push(endDate);
-    }
-    query += ` ORDER BY created_at DESC`;
-
-    // Get all results within date range
-    const results = db.prepare(query).all(...params);
-
-    // Get section scores and detailed answers for each result
-    const detailedResults = await Promise.all(results.map(async (result) => {
-      const sectionScores = db.prepare('SELECT * FROM section_scores WHERE result_id = ? ORDER BY section_title').all(result.id);
-      const answers = db.prepare('SELECT * FROM detailed_answers WHERE result_id = ? ORDER BY section_title, question_id').all(result.id);
-      
-      return {
-        ...result,
-        sectionScores,
-        answers
-      };
-    }));
-
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('Quiz Results');
-
-    // Define base columns
-    const columns = [
-      { header: 'ID результата', key: 'id' },
-      { header: 'Дата', key: 'date' },
-      { header: 'ФИО', key: 'name' }
+    // Build row data
+    const rowData = [
+      result.id,
+      result.last_name,
+      result.first_name,
+      result.created_at,
+      totalScore,
+      `"${result.overall_result || calculateOverallResult(totalScore)}"`
     ];
 
-    // Add answer-score pair columns
-    for (let i = 0; i < 40; i++) {
+    // Add data for each block
+    [1, 2, 3, 4].forEach(blockNum => {
+      const blockScore = sectionScores[`Блок ${blockNum}`] || 0;
+      const blockResult = calculateTestResult(blockNum, blockScore) || 'Нет данных';
+      
+      // Add block score and result
+      rowData.push(blockScore, `"${blockResult}"`);
+
+      // Add questions and answers for this block
+      [1, 2, 3, 4, 5].forEach(questionNum => {
+        const answer = answersByBlock[blockNum]?.[questionNum] || {};
+        rowData.push(
+          `"${answer.question_text || ''}"`,
+          `"${answer.answer_text || ''}"`,
+          answer.score || 0
+        );
+      });
+    });
+
+    return rowData.join(',');
+  });
+
+  return headers + rows.join('\n');
+}
+
+async function exportToExcel(results) {
+  try {
+    logger.info('Starting Excel export with', results.length, 'results');
+    
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'StomatQuiz';
+    workbook.lastModifiedBy = 'StomatQuiz';
+    workbook.created = new Date();
+    workbook.modified = new Date();
+    
+    // Summary worksheet
+    const summarySheet = workbook.addWorksheet('Общие результаты', {
+      properties: { tabColor: { argb: 'FF00BFFF' } }
+    });
+
+    // Define columns
+    const columns = [
+      { header: 'ID', key: 'id', width: 10 },
+      { header: 'Фамилия', key: 'lastName', width: 20 },
+      { header: 'Имя', key: 'firstName', width: 20 },
+      { header: 'Дата', key: 'date', width: 20 },
+      { header: 'Общий балл', key: 'totalScore', width: 15 },
+      { header: 'Общий результат', key: 'overallResult', width: 80 }
+    ];
+
+    // Add columns for each block
+    [1, 2, 3, 4].forEach(blockNum => {
       columns.push(
-        { header: `Ответ ${i + 1}`, key: `answer_${i}` },
-        { header: `Балл ${i + 1}`, key: `score_${i}` }
+        { header: `Блок ${blockNum} (балл)`, key: `block${blockNum}Score`, width: 15 },
+        { header: `Блок ${blockNum} (результат)`, key: `block${blockNum}Result`, width: 60 }
       );
-    }
+      
+      // Add columns for questions in this block
+      [1, 2, 3, 4, 5].forEach(questionNum => {
+        columns.push(
+          { header: `Вопрос ${blockNum}.${questionNum}`, key: `q${blockNum}_${questionNum}`, width: 40 },
+          { header: `Ответ ${blockNum}.${questionNum}`, key: `a${blockNum}_${questionNum}`, width: 40 },
+          { header: `Балл ${blockNum}.${questionNum}`, key: `s${blockNum}_${questionNum}`, width: 15 }
+        );
+      });
+    });
 
-    // Add summary columns
-    columns.push(
-      { header: 'Общий балл', key: 'total_score' },
-      { header: 'Описание результата', key: 'score_description' }
-    );
+    summarySheet.columns = columns;
 
-    worksheet.columns = columns;
+    // Style the headers
+    const headerRow = summarySheet.getRow(1);
+    headerRow.font = { bold: true, size: 12 };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE6F0FF' }
+    };
+    headerRow.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
 
-    // Format data rows
-    const rows = detailedResults.map(r => {
-      const row = {
-        id: r.id,
-        date: r.created_at,
-        name: `${r.last_name} ${r.first_name}`
-      };
+    // Add data rows
+    results.forEach((result, index) => {
+      const sectionScores = result.section_scores || {};
+      const totalScore = result.total_score || 0;
+      const detailedAnswers = result.detailed_answers || [];
 
-      // Initialize empty answers/scores
-      for (let i = 0; i < 40; i++) {
-        row[`answer_${i}`] = '';
-        row[`score_${i}`] = '';
-      }
-
-      // Fill actual answers/scores
-      r.answers.forEach(a => {
-        const qIndex = a.question_id;
-        row[`answer_${qIndex}`] = a.answer_text;
-        row[`score_${qIndex}`] = a.score;
+      // Group answers by block and question
+      const answersByBlock = {};
+      detailedAnswers.forEach(answer => {
+        const blockNumber = Math.floor((answer.question_id - 1) / 5) + 1;
+        const questionInBlock = ((answer.question_id - 1) % 5) + 1;
+        if (!answersByBlock[blockNumber]) {
+          answersByBlock[blockNumber] = {};
+        }
+        answersByBlock[blockNumber][questionInBlock] = answer;
       });
 
-      // Calculate total
-      const totalScore = r.answers.reduce((sum, a) => sum + a.score, 0);
-      row.total_score = totalScore;
-      row.score_description = totalScore <= 40 ? 'Низкий уровень' : 
-                            totalScore <= 80 ? 'Средний уровень' : 
-                            'Высокий уровень';
+      // Prepare row data
+      const rowData = {
+        id: result.id,
+        lastName: result.last_name,
+        firstName: result.first_name,
+        date: result.created_at,
+        totalScore: totalScore,
+        overallResult: result.overall_result || calculateOverallResult(totalScore)
+      };
 
-      return row;
+      // Add data for each block
+      [1, 2, 3, 4].forEach(blockNum => {
+        const blockScore = sectionScores[`Блок ${blockNum}`] || 0;
+        const blockResult = calculateTestResult(blockNum, blockScore) || 'Нет данных';
+        
+        rowData[`block${blockNum}Score`] = blockScore;
+        rowData[`block${blockNum}Result`] = blockResult;
+
+        // Add questions and answers for this block
+        [1, 2, 3, 4, 5].forEach(questionNum => {
+          const answer = answersByBlock[blockNum]?.[questionNum] || {};
+          rowData[`q${blockNum}_${questionNum}`] = answer.question_text || '';
+          rowData[`a${blockNum}_${questionNum}`] = answer.answer_text || '';
+          rowData[`s${blockNum}_${questionNum}`] = answer.score || 0;
+        });
+      });
+
+      const row = summarySheet.addRow(rowData);
+
+      // Style the row
+      row.alignment = { vertical: 'middle', wrapText: true };
+      if ((index + 2) % 2 === 0) {
+        row.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFF8F8F8' }
+        };
+      }
+
+      // Format score cells
+      row.eachCell((cell, colNumber) => {
+        const column = columns[colNumber - 1];
+        if (column.key.startsWith('block') && column.key.endsWith('Score') ||
+            column.key.startsWith('s') ||
+            column.key === 'totalScore') {
+          cell.numFmt = '0.00';
+          cell.alignment = { horizontal: 'center' };
+        } else if (column.key.endsWith('Result')) {
+          cell.alignment = { horizontal: 'left', wrapText: true };
+          cell.font = { bold: true };
+        }
+      });
     });
 
-    worksheet.addRows(rows);
-
-    // Auto-width columns
-    worksheet.columns.forEach(column => {
-      column.width = 20;
-      column.alignment = { wrapText: true };
+    // Add borders
+    summarySheet.eachRow(row => {
+      row.eachCell(cell => {
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' }
+        };
+      });
     });
 
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename=quiz_results.xlsx');
+    // Freeze header row and enable filters
+    summarySheet.views = [
+      { 
+        state: 'frozen', 
+        xSplit: 0, 
+        ySplit: 1, 
+        activeCell: 'A2',
+        showRowColHeaders: true,
+        filterButton: true
+      }
+    ];
 
-    await workbook.xlsx.write(res);
+    logger.info('Generating Excel buffer...');
+    const buffer = await workbook.xlsx.writeBuffer();
+    logger.info('Excel buffer generated, size:', buffer.length, 'bytes');
+    return buffer;
   } catch (error) {
-    console.error('Error exporting results:', error);
-    res.status(500).json({ error: 'Failed to export results' });
+    logger.error('Error in exportToExcel:', error);
+    throw error;
   }
-});
+}
 
 // Admin login endpoint
 app.post('/api/admin/login', (req, res) => {
+  logger.info('Login attempt:', req.body);
+  logger.info('Headers:', req.headers);
+  
   const { password } = req.body;
 
-  if (password === ADMIN_PASSWORD) {
-    const token = jwt.sign({ role: 'admin' }, JWT_SECRET, { expiresIn: '1h' });
+  if (password === 'admin123') {
+    logger.info('Login successful');
+    const token = jwt.sign({ role: 'admin' }, '7683968aed78db52866fb4f4174fedd2d13cbb34da4075f07bbc03bf05768ce4', { expiresIn: '1h' });
     res.json({ token });
   } else {
+    logger.info('Login failed: invalid password');
     res.status(401).json({ error: 'Invalid password' });
   }
 });
 
+// Middleware to authenticate token
+function authenticateToken(req, res, next) {
+  logger.info('Authenticating request to:', req.path);
+  logger.info('Auth headers:', req.headers.authorization);
+  
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    logger.info('No token provided');
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  jwt.verify(token, '7683968aed78db52866fb4f4174fedd2d13cbb34da4075f07bbc03bf05768ce4', (err, user) => {
+    if (err) {
+      logger.info('Token verification failed:', err.message);
+      return res.status(403).json({ error: 'Invalid token' });
+    }
+    logger.info('Token verified for user:', user);
+    req.user = user;
+    next();
+  });
+}
+
+app.get('/api/questions', (req, res) => {
+  try {
+    if (!quizData || !Array.isArray(quizData) || quizData.length === 0) {
+      logger.error('Quiz data is not properly loaded');
+      return res.status(500).json({ error: 'Quiz data is not available' });
+    }
+    
+    logger.info('Sending quiz data. Number of sections:', quizData.length);
+    res.json(quizData);
+  } catch (error) {
+    logger.error('Error sending quiz data:', error);
+    res.status(500).json({ error: 'Failed to retrieve quiz data' });
+  }
+});
+
+app.post('/api/results', async (req, res) => {
+  const { firstName, lastName, sectionScores, totalScore, detailedAnswers } = req.body;
+  const overallResult = calculateOverallResult(totalScore);
+  
+  logger.info('Saving results:', { 
+    firstName, 
+    lastName, 
+    totalScore,
+    overallResult,
+    sectionScores,
+    answerCount: detailedAnswers?.length || 0
+  });
+
+ try {
+      const resultId = await new Promise((resolve, reject) => {
+        db.serialize(() => {
+          db.run(
+            'INSERT INTO results (first_name, last_name, total_score, overall_result, created_at) VALUES (?, ?, ?, ?, datetime("now"))',
+            [firstName, lastName, totalScore, overallResult],
+            function(err) {
+              if (err) reject(err);
+              resolve(this.lastID);
+            }
+          );
+        });
+      });
+      // Now resultId is available here
+      await Promise.all([
+        ...sectionScores.map(score => 
+          new Promise((resolve, reject) => {
+            db.run(
+              'INSERT INTO section_scores (result_id, section_number, score) VALUES (?, ?, ?)',
+              [resultId, score.sectionNumber, score.score],
+              err => err ? reject(err) : resolve()
+            );
+          })
+        ),
+        ...detailedAnswers.map(answer => 
+          new Promise((resolve, reject) => {
+            db.run(
+              'INSERT INTO detailed_answers (result_id, question_number, answer, is_correct) VALUES (?, ?, ?, ?)',
+              [resultId, answer.questionNumber, answer.answer, answer.isCorrect],
+              err => err ? reject(err) : resolve()
+            );
+          })
+        )
+      ]);
+  
+      logger.info('Results saved successfully');
+      res.json({ 
+        success: true, 
+        message: 'Results saved successfully',
+        resultId: resultId
+      });
+  
+      res.json({ success: true, resultId });
+  
+  
+    } catch (error) {
+      logger.error('Error saving results:', error);
+      res.status(500).json({ error: 'Failed to save results', details: error.message });
+    }
+  });
+
+
+// Получение отфильтрованных результатов
+function getFilteredResults(from, to, name) {
+  try {
+    let query = `
+      SELECT 
+        r.*,
+        GROUP_CONCAT(DISTINCT s.section_name || ':' || s.score) as section_scores,
+        GROUP_CONCAT(
+          d.question_id || '|' || 
+          COALESCE(d.question_text, '') || '|' || 
+          COALESCE(d.answer_text, '') || '|' || 
+          COALESCE(d.answer_index, 0) || '|' || 
+          COALESCE(d.possible_score, 0) || '|' || 
+          COALESCE(d.score, 0),
+          ';;'
+        ) as detailed_answers
+      FROM quiz_results r
+      LEFT JOIN section_scores s ON r.id = s.result_id
+      LEFT JOIN detailed_answers d ON r.id = d.result_id
+      WHERE 1=1
+    `;
+    const params = [];
+
+    if (from) {
+      query += ` AND DATE(r.created_at) >= DATE(?)`;
+      params.push(from);
+    }
+    if (to) {
+      query += ` AND DATE(r.created_at) <= DATE(?)`;
+      params.push(to);
+    }
+    if (name) {
+      query += ` AND (r.first_name LIKE ? OR r.last_name LIKE ?)`;
+      params.push(`%${name}%`, `%${name}%`);
+    }
+    query += ` GROUP BY r.id ORDER BY r.created_at DESC`;
+
+    logger.info('Running query:', query, 'with params:', params);
+    const results = db.all(query, params);
+    
+    return results.map(result => {
+      // Parse section scores
+      const sectionScores = {};
+      if (result.section_scores) {
+        result.section_scores.split(',').forEach(score => {
+          const [name, value] = score.split(':');
+          sectionScores[name] = parseFloat(value);
+        });
+      }
+
+      // Parse detailed answers
+      const detailedAnswers = [];
+      if (result.detailed_answers) {
+        result.detailed_answers.split(';;').forEach(answer => {
+          if (!answer) return;
+          const [questionId, questionText, answerText, answerIndex, possibleScore, score] = answer.split('|');
+          detailedAnswers.push({
+            question_id: parseInt(questionId),
+            question_text: questionText || '',
+            answer_text: answerText || '',
+            answer_index: parseInt(answerIndex) || 0,
+            possible_score: parseFloat(possibleScore) || 0,
+            score: parseFloat(score) || 0
+          });
+        });
+      }
+
+      // Sort detailed answers by question_id to maintain order
+      detailedAnswers.sort((a, b) => a.question_id - b.question_id);
+
+      return {
+        id: result.id,
+        first_name: result.first_name,
+        last_name: result.last_name,
+        created_at: result.created_at,
+        total_score: result.total_score,
+        overall_result: result.overall_result,
+        section_scores: sectionScores,
+        detailed_answers: detailedAnswers
+      };
+    });
+  } catch (error) {
+    logger.error('Error in getFilteredResults:', error);
+    throw error;
+  }
+}
+
 app.get('/api/results', authenticateToken, async (req, res) => {
   try {
-    const results = db.prepare('SELECT * FROM quiz_results ORDER BY created_at DESC').all();
-    const fullResults = await Promise.all(results.map(async (result) => {
-      const sectionScores = db.prepare('SELECT * FROM section_scores WHERE result_id = ?').all(result.id);
-      const detailedAnswers = db.prepare('SELECT * FROM detailed_answers WHERE result_id = ?').all(result.id);
-      
-      return {
-        ...result,
-        sectionScores,
-        detailedAnswers
-      };
-    }));
+    const { from, to, name, format } = req.query;
+    logger.info('Getting results with params:', { from, to, name, format });
+    
+    const results = getFilteredResults(from, to, name);
+    logger.info(`Found ${results.length} results`);
 
-    res.json(fullResults);
+    if (format === 'csv') {
+      const csvContent = await exportToCSV(results);
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=results.csv');
+      return res.send(csvContent);
+    } else if (format === 'excel') {
+      const buffer = await exportToExcel(results);
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename=results.xlsx');
+      return res.send(buffer);
+    }
+
+    res.json(results);
   } catch (error) {
-    console.error('Error getting results:', error);
-    res.status(500).json({ error: 'Failed to get results' });
+    logger.error('Error getting results:', error);
+    res.status(500).json({ error: 'Failed to get results', details: error.message });
+  }
+});
+
+app.get('/api/results/csv', authenticateToken, async (req, res) => {
+  try {
+    const { from, to, name } = req.query;
+    const results = getFilteredResults(from, to, name);
+    const csvContent = await exportToCSV(results);
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="test_results.csv"');
+    res.send(csvContent);
+  } catch (error) {
+    logger.error('Error exporting results:', error);
+    res.status(500).json({ error: 'Failed to export results' });
   }
 });
 
 app.get('/api/results/excel', authenticateToken, async (req, res) => {
   try {
-    const results = db.prepare('SELECT * FROM quiz_results ORDER BY created_at DESC').all();
-    const filename = await exportToExcel(results);
-    res.download(filename);
+    const { from, to, name } = req.query;
+    const results = getFilteredResults(from, to, name);
+    const excelBuffer = await exportToExcel(results);
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="test_results.xlsx"');
+    res.send(Buffer.from(excelBuffer));
   } catch (error) {
-    console.error('Error exporting to Excel:', error);
+    logger.error('Error exporting results:', error);
     res.status(500).json({ error: 'Failed to export results' });
-  }
-});
-
-app.delete('/api/results/:id', authenticateToken, async (req, res) => {
-  const { id } = req.params;
-  
-  try {
-    db.exec('BEGIN TRANSACTION');
-    db.prepare('DELETE FROM section_scores WHERE result_id = ?').run(id);
-    db.prepare('DELETE FROM detailed_answers WHERE result_id = ?').run(id);
-    db.prepare('DELETE FROM quiz_results WHERE id = ?').run(id);
-    db.exec('COMMIT');
-    
-    res.json({ success: true });
-  } catch (error) {
-    db.exec('ROLLBACK');
-    console.error('Error deleting result:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-app.delete('/api/results', authenticateToken, async (req, res) => {
-  try {
-    db.exec('BEGIN TRANSACTION');
-    db.exec('DELETE FROM section_scores');
-    db.exec('DELETE FROM detailed_answers');
-    db.exec('DELETE FROM quiz_results');
-    db.exec('COMMIT');
-    
-    res.json({ success: true });
-  } catch (error) {
-    db.exec('ROLLBACK');
-    console.error('Error deleting all results:', error);
-    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -488,14 +833,170 @@ app.post('/api/admin/init-db', authenticateToken, async (req, res) => {
     await initializeDatabase();
     res.json({ success: true, message: 'Database initialized successfully' });
   } catch (error) {
-    console.error('Error initializing database:', error);
+    logger.error('Error initializing database:', error);
     res.status(500).json({ error: 'Failed to initialize database' });
   }
 });
 
+// Admin endpoint to initialize database tables
+app.post('/api/admin/init-db-tables', authenticateToken, async (req, res) => {
+  try {
+    await initializeDatabase();
+    res.json({ success: true, message: 'Database tables initialized successfully' });
+  } catch (error) {
+    logger.error('Error initializing database tables:', error);
+    res.status(500).json({ error: 'Failed to initialize database tables' });
+  }
+});
+
+// Reinitialize database endpoint
+app.post('/api/admin/reinit-db', authenticateToken, async (req, res) => {
+  try {
+    logger.info('Reinitializing database...');
+    
+    // Start transaction
+    db.serialize(() => {
+      // Drop existing tables
+      db.run('DROP TABLE IF EXISTS detailed_answers');
+      db.run('DROP TABLE IF EXISTS section_scores');
+      db.run('DROP TABLE IF EXISTS quiz_results');
+      
+      // Recreate tables
+      db.exec(`
+        CREATE TABLE quiz_results (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          first_name TEXT,
+          last_name TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          total_score REAL,
+          overall_result TEXT
+        );
+
+        CREATE TABLE section_scores (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          result_id INTEGER,
+          section_name TEXT,
+          score REAL,
+          FOREIGN KEY (result_id) REFERENCES quiz_results(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE detailed_answers (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          result_id INTEGER,
+          question_id INTEGER,
+          question_text TEXT,
+          answer_text TEXT,
+          answer_index INTEGER,
+          possible_score REAL,
+          score REAL,
+          FOREIGN KEY (result_id) REFERENCES quiz_results(id) ON DELETE CASCADE
+        );
+      `);
+    });
+
+    logger.info('Database reinitialized successfully');
+    res.json({ success: true, message: 'Database reinitialized successfully' });
+  } catch (error) {
+    logger.error('Error reinitializing database:', error);
+    res.status(500).json({ error: 'Failed to reinitialize database' });
+  }
+});
+
+// Reset database endpoint
+app.post('/api/admin/reset-database', authenticateToken, async (req, res) => {
+  try {
+    logger.info('Resetting database...');
+    
+    db.serialize(() => {
+      db.run('DELETE FROM section_scores');
+      db.run('DELETE FROM detailed_answers');
+      db.run('DELETE FROM quiz_results');
+    });
+    
+    logger.info('Database reset successfully');
+    return res.json({ message: 'Database reset successfully' });
+  } catch (error) {
+    logger.error('Error resetting database:', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete result endpoint
+app.delete('/api/results/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Check if result exists
+    const result = db.get('SELECT id FROM quiz_results WHERE id = ?', id);
+    if (!result) {
+      return res.status(404).json({ error: 'Result not found' });
+    }
+
+    // Enable foreign key support
+    db.run('PRAGMA foreign_keys = ON');
+
+    // Delete result (related records will be deleted automatically due to ON DELETE CASCADE)
+    const deleteStmt = db.prepare('DELETE FROM quiz_results WHERE id = ?');
+    const info = deleteStmt.run(id);
+
+    if (info.changes === 0) {
+      return res.status(404).json({ error: 'Result not found' });
+    }
+
+    return res.json({ message: 'Result deleted successfully' });
+  } catch (error) {
+    logger.error('Error in delete operation:', error);
+    return res.status(500).json({ 
+      error: 'Failed to delete result',
+      details: error.message 
+    });
+  }
+});
+
+app.delete('/api/results', authenticateToken, async (req, res) => {
+  try {
+    db.serialize(() => {
+      db.run('DELETE FROM section_scores');
+      db.run('DELETE FROM detailed_answers');
+      db.run('DELETE FROM quiz_results');
+    });
+    
+    return res.json({ message: 'All results deleted successfully' });
+  } catch (error) {
+    logger.error('Error deleting all results:', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// Форматирование даты
+function formatDate(dateStr) {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('ru-RU', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  db.get('SELECT 1', (err) => {
+      if (err) {
+          logger.error('Database health check failed:', err);
+          res.status(500).json({ status: 'error', message: 'Database connection failed' });
+          return;
+      }
+      res.json({ status: 'ok' });
+  });
+});
+
 // Error handling middleware
-app.use((err, req, res, next) => {
-  console.error('Error:', err.stack);
+app.use((err, res)  => {
+  logger.error('Error:', err.stack);
   res.status(err.status || 500).json({
     error: {
       message: err.message || 'Internal Server Error',
@@ -504,9 +1005,19 @@ app.use((err, req, res, next) => {
   });
 });
 
+// Error handling middleware should be last
+app.use('/api/*', (res) => {
+  res.status(404).json({ error: 'Not Found' });
+});
+
+app.use((err, res ) => {
+  logger.error('Unhandled error:', err);
+  res.status(500).json({ error: 'Internal Server Error' });
+});
+
 // Handle uncaught exceptions
 process.on('uncaughtException', (err) => {
-  console.error('Uncaught Exception:', err);
+  logger.error('Uncaught Exception:', err);
   // Give time for logs to be written
   setTimeout(() => {
     process.exit(1);
@@ -515,7 +1026,7 @@ process.on('uncaughtException', (err) => {
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
   // Give time for logs to be written
   setTimeout(() => {
     process.exit(1);
@@ -524,14 +1035,15 @@ process.on('unhandledRejection', (reason, promise) => {
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
-  console.info('SIGTERM signal received. Closing HTTP server...');
+  logger.info('SIGTERM signal received. Closing HTTP server...');
   server.close(() => {
-    console.info('HTTP server closed');
+    logger.info('HTTP server closed');
     process.exit(0);
   });
 });
 
-const PORT = process.env.PORT || 3002;
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+// Start server
+const server = app.listen(PORT, () => {
+  logger.info(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+  logger.info(`CORS enabled for origins: ${currentConfig.allowedOrigins.join(', ')}`);
 });

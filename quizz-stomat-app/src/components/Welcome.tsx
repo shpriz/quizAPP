@@ -21,7 +21,7 @@ const Welcome: React.FC<WelcomeProps> = ({ onStart }) => {
     <Container className="welcome-container">
       <Card className="welcome-card">
         <Card.Body>
-          <h2 className="text-center mb-4">Добро пожаловать в тест!</h2>
+          <h2 className="text-center mb-4">Добро пожаловать!</h2>
           
           {!showForm ? (
             <>

@@ -1,10 +1,12 @@
-FROM node:22-alpine3.19 as builder
+# Build stage
+FROM node:20-alpine AS build
 
-WORKDIR /usr/src/app
+WORKDIR /app
 
+# Copy package files
 COPY package*.json ./
 
-# Install all dependencies
+# Install dependencies
 RUN npm install
 
 # Copy source code
@@ -16,11 +18,11 @@ RUN npm run build
 # Production stage
 FROM nginx:alpine
 
-# Copy built assets from builder stage
-COPY --from=builder /usr/src/app/dist /usr/share/nginx/html
+# Copy built assets from build stage (not builder)
+COPY --from=build /app/dist /usr/share/nginx/html
 
-# Copy nginx config
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Copy nginx configuration
+COPY nginx.conf /etc/nginx/nginx.conf
 
 EXPOSE 80
 

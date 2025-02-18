@@ -4,33 +4,30 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "lint": "eslint .",
-    "preview": "vite preview"
+    "dev": "vite --port 3000",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "start": "serve -s dist"
   },
   "dependencies": {
-    "@types/react-bootstrap": "^0.32.37",
-    "@types/xlsx": "^0.0.35",
-    "bootstrap": "^5.3.3",
-    "react": "^18.3.1",
-    "react-bootstrap": "^2.10.9",
-    "react-dom": "^18.3.1",
-    "react-router": "^7.1.5",
-    "react-router-dom": "^7.1.5",
-    "xlsx": "^0.18.5"
+    "@types/uuid": "^10.0.0",
+    "bootstrap": "^5.3.2",
+    "fs-extra": "^11.3.0",
+    "glob": "^11.0.1",
+    "lru-cache": "^11.0.2",
+    "react": "^18.2.0",
+    "react-bootstrap": "^2.10.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.22.0",
+    "rimraf": "^6.0.1",
+    "serve": "^14.2.1",
+    "uuid": "^11.0.5"
   },
   "devDependencies": {
-    "@eslint/js": "^9.17.0",
-    "@types/react": "^18.3.18",
-    "@types/react-dom": "^18.3.5",
-    "@vitejs/plugin-react": "^4.3.4",
-    "eslint": "^9.17.0",
-    "eslint-plugin-react-hooks": "^5.0.0",
-    "eslint-plugin-react-refresh": "^0.4.16",
-    "globals": "^15.14.0",
-    "typescript": "~5.6.2",
-    "typescript-eslint": "^8.18.2",
-    "vite": "^6.0.5"
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "@vitejs/plugin-react": "^4.2.1",
+    "typescript": "^5.7.3",
+    "vite": "^6.1.0"
   }
 }
