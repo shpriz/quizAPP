@@ -15,7 +15,7 @@ const PORT = process.env.PORT || 3002;
 // Development and Production configurations
 const CONFIG = {
   development: {
-    allowedOrigins: ['http://localhost:5173', 'http://localhost:3000'],
+    allowedOrigins: ['http://localhost:5173', 'http://localhost:3000', 'http://stomtest.nsmu.ru'],
     databasePath: path.join(__dirname, 'data', 'quiz-data.json'),
     verbose: true
   },
