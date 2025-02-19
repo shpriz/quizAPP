@@ -1,6 +1,6 @@
 // Environment configuration
 const DEVELOPMENT_API = 'http://localhost:3002';
-const PRODUCTION_API = 'http://stomtest.nsmu.ru:3002';
+const PRODUCTION_API = ''; // Empty string to use relative paths
 
 // Check if we're in development mode
 const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';

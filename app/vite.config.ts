@@ -19,7 +19,6 @@ export default defineConfig(({ mode }) => ({
       output: {
         manualChunks: {
           vendor: ['react', 'react-dom', 'react-router-dom', 'react-bootstrap'],
-          // Другие зависимости, которые нужно разделить
         }
       }
     }
@@ -27,7 +26,7 @@ export default defineConfig(({ mode }) => ({
 
   // Настройки сервера разработки
   server: {
-    allowedHosts: ['stomtest.nsmu.ru'],
+    allowedHosts: ['medquiz.ru'],  // Updated domain
     host: true,
     port: 5173,
     strictPort: true,
@@ -35,6 +34,7 @@ export default defineConfig(({ mode }) => ({
       '/api': {
         target: 'http://backend:3002',
         changeOrigin: true,
+        secure: false,
         rewrite: (path) => path.replace(/^\/api/, '')
       }
     }

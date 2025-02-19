@@ -15,12 +15,12 @@ const PORT = process.env.PORT || 3002;
 // Development and Production configurations
 const CONFIG = {
   development: {
-    allowedOrigins: ['http://localhost:5173', 'http://localhost:3000', 'http://stomtest.nsmu.ru'],
+    allowedOrigins: ['http://localhost:5173', 'http://localhost:3000', 'http://stomtest.nsmu.ru', 'http://medquiz.ru'],
     databasePath: path.join(__dirname, 'data', 'quiz-data.json'),
     verbose: true
   },
   production: {
-    allowedOrigins: ['http://stomtest.nsmu.ru', 'https://stomtest.nsmu.ru'],
+    allowedOrigins: ['http://medquiz.ru', 'https://medquiz.ru', 'http://www.medquiz.ru', 'https://www.medquiz.ru'],
     databasePath: path.join(__dirname, 'data', 'quiz-data.json'),
     verbose: false
   }
@@ -33,8 +33,10 @@ const currentConfig = isDevelopment ? CONFIG.development : CONFIG.production;
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
-  'http://stomtest.nsmu.ru',
-  'https://stomtest.nsmu.ru'
+  'http://medquiz.ru',
+  'https://medquiz.ru',
+  'http://www.medquiz.ru',
+  'https://www.medquiz.ru'
 ];
 
 app.use(cors({
@@ -509,7 +511,7 @@ async function exportToExcel(results) {
 }
 
 // Admin login endpoint
-app.post('/api/admin/login', (req, res) => {
+app.post('/admin/login', (req, res) => {
   console.log('Login attempt:', req.body);
   console.log('Headers:', req.headers);
 
@@ -549,7 +551,7 @@ function authenticateToken(req, res, next) {
   });
 }
 
-app.get('/api/questions', (req, res) => {
+app.get('/questions', (req, res) => {
   try {
     if (!quizData || !Array.isArray(quizData) || quizData.length === 0) {
       console.error('Quiz data is not properly loaded');
@@ -564,7 +566,7 @@ app.get('/api/questions', (req, res) => {
   }
 });
 
-app.post('/api/results', async (req, res) => {
+app.post('/results', async (req, res) => {
   const { firstName, lastName, sectionScores, totalScore, detailedAnswers } = req.body;
   console.log('Saving results:', {
     firstName,
@@ -749,7 +751,7 @@ function getFilteredResults(from, to, name) {
   }
 }
 
-app.get('/api/results', authenticateToken, async (req, res) => {
+app.get('/results', authenticateToken, async (req, res) => {
   try {
     const { from, to, name, format } = req.query;
     console.log('Getting results with params:', { from, to, name, format });
@@ -776,7 +778,7 @@ app.get('/api/results', authenticateToken, async (req, res) => {
   }
 });
 
-app.get('/api/results/csv', authenticateToken, async (req, res) => {
+app.get('/results/csv', authenticateToken, async (req, res) => {
   try {
     const { from, to, name } = req.query;
     const results = getFilteredResults(from, to, name);
@@ -791,7 +793,7 @@ app.get('/api/results/csv', authenticateToken, async (req, res) => {
   }
 });
 
-app.get('/api/results/excel', authenticateToken, async (req, res) => {
+app.get('/results/excel', authenticateToken, async (req, res) => {
   try {
     const { from, to, name } = req.query;
     const results = getFilteredResults(from, to, name);
@@ -807,7 +809,7 @@ app.get('/api/results/excel', authenticateToken, async (req, res) => {
 });
 
 // Admin endpoint to initialize database
-app.post('/api/admin/init-db', authenticateToken, async (req, res) => {
+app.post('/admin/init-db', authenticateToken, async (req, res) => {
   try {
     await initializeDatabase();
     res.json({ success: true, message: 'Database initialized successfully' });
@@ -818,7 +820,7 @@ app.post('/api/admin/init-db', authenticateToken, async (req, res) => {
 });
 
 // Admin endpoint to initialize database tables
-app.post('/api/admin/init-db-tables', authenticateToken, async (req, res) => {
+app.post('/admin/init-db-tables', authenticateToken, async (req, res) => {
   try {
     await initializeDatabaseTables();
     res.json({ success: true, message: 'Database tables initialized successfully' });
@@ -829,7 +831,7 @@ app.post('/api/admin/init-db-tables', authenticateToken, async (req, res) => {
 });
 
 // Reinitialize database endpoint
-app.post('/api/admin/reinit-db', authenticateToken, async (req, res) => {
+app.post('/admin/reinit-db', authenticateToken, async (req, res) => {
   try {
     console.log('Reinitializing database...');
 
@@ -891,7 +893,7 @@ app.post('/api/admin/reinit-db', authenticateToken, async (req, res) => {
 });
 
 // Reset database endpoint
-app.post('/api/admin/reset-database', authenticateToken, async (req, res) => {
+app.post('/admin/reset-database', authenticateToken, async (req, res) => {
   try {
     console.log('Resetting database...');
 
@@ -911,7 +913,7 @@ app.post('/api/admin/reset-database', authenticateToken, async (req, res) => {
 });
 
 // Delete result endpoint
-app.delete('/api/results/:id', authenticateToken, async (req, res) => {
+app.delete('/results/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -942,7 +944,7 @@ app.delete('/api/results/:id', authenticateToken, async (req, res) => {
   }
 });
 
-app.delete('/api/results', authenticateToken, async (req, res) => {
+app.delete('/results', authenticateToken, async (req, res) => {
   try {
     db.exec('BEGIN TRANSACTION');
     db.exec('DELETE FROM section_scores');

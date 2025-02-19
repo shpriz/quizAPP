@@ -1,0 +1,3 @@
+echo "node_modules/" > .deployignore
+echo "dist/" >> .deployignore
+echo "*.log" >> .deployignore
