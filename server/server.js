@@ -38,10 +38,10 @@ const allowedOrigins = [
 ];
 
 app.use(cors({
-  origin: function(origin, callback) {
+  origin: function (origin, callback) {
     // allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
-    
+
     if (allowedOrigins.indexOf(origin) === -1) {
       var msg = 'The CORS policy for this site does not allow access from the specified Origin.';
       return callback(new Error(msg), false);
@@ -70,17 +70,17 @@ let quizData;
 try {
   const quizDataPath = currentConfig.databasePath;
   console.log('Loading quiz data from:', quizDataPath);
-  
+
   if (!fs.existsSync(quizDataPath)) {
     console.error('Quiz data file not found:', quizDataPath);
     throw new Error('Quiz data file not found');
   }
-  
+
   const fileContent = fs.readFileSync(quizDataPath, 'utf8');
   if (isDevelopment) {
     console.log('Quiz data file content length:', fileContent.length);
   }
-  
+
   quizData = JSON.parse(fileContent);
   console.log('Quiz data loaded successfully. Number of sections:', quizData.length);
 } catch (error) {
@@ -170,7 +170,7 @@ function calculateTestResult(testNumber, score) {
       return 'низкий уровень ухода за полостью рта у жителей психоневрологических интернатов';
     }
   }
-  
+
   // Блок 2: "Стоматологическая помощь, оказываемая жителям психоневрологического интерната и ее качество"
   if (testNumber === 2) {
     if (score >= 10 && score <= 18) {
@@ -183,7 +183,7 @@ function calculateTestResult(testNumber, score) {
       return 'низкий уровень оказания стоматологической помощи жителям психоневрологических интернатов';
     }
   }
-  
+
   // Блок 3: "Образ жизни и питание жителей психоневрологических интернатов"
   if (testNumber === 3) {
     if (score >= 8 && score <= 15) {
@@ -194,7 +194,7 @@ function calculateTestResult(testNumber, score) {
       return 'жители психоневрологических интернатов не ведут здоровый образ жизни или близкий к нему';
     }
   }
-  
+
   // Блок 4: "Уход за полостью рта у лиц, находящихся в отделении милосердия"
   if (testNumber === 4) {
     if (score >= 4 && score <= 8) {
@@ -205,7 +205,7 @@ function calculateTestResult(testNumber, score) {
       return 'низкий уровень ухода за полостью рта у лиц, находящихся в отделении милосердия';
     }
   }
-  
+
   return 'Нет данных';
 }
 
@@ -291,7 +291,7 @@ async function exportToCSV(results) {
     'Вопрос 4.5',
     'Ответ 4.5',
     'Балл 4.5',
-    
+
   ].join(',') + '\n';
 
   // Convert results to rows
@@ -323,7 +323,7 @@ async function exportToCSV(results) {
     [1, 2, 3, 4].forEach(blockNum => {
       const blockScore = sectionScores[`Блок ${blockNum}`] || 0;
       const blockResult = calculateTestResult(blockNum, blockScore);
-      
+
       // Add block score and result
       rowData.push(blockScore, blockResult);
 
@@ -350,13 +350,13 @@ async function exportToCSV(results) {
 async function exportToExcel(results) {
   try {
     console.log('Starting Excel export with', results.length, 'results');
-    
+
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'StomatQuiz';
     workbook.lastModifiedBy = 'StomatQuiz';
     workbook.created = new Date();
     workbook.modified = new Date();
-    
+
     // Summary worksheet
     const summarySheet = workbook.addWorksheet('Общие результаты', {
       properties: { tabColor: { argb: 'FF00BFFF' } }
@@ -377,7 +377,7 @@ async function exportToExcel(results) {
         { header: `Блок ${blockNum} (балл)`, key: `block${blockNum}Score`, width: 15 },
         { header: `Блок ${blockNum} (результат)`, key: `block${blockNum}Result`, width: 60 }
       );
-      
+
       // Add columns for questions in this block
       [1, 2, 3, 4, 5].forEach(questionNum => {
         columns.push(
@@ -411,7 +411,7 @@ async function exportToExcel(results) {
       detailedAnswers.forEach(answer => {
         const blockNumber = Math.floor((answer.question_id - 1) / 5) + 1;
         const questionInBlock = ((answer.question_id - 1) % 5) + 1;
-        
+
         if (!answersByBlock[blockNumber]) {
           answersByBlock[blockNumber] = {};
         }
@@ -434,7 +434,7 @@ async function exportToExcel(results) {
       [1, 2, 3, 4].forEach(blockNum => {
         const blockScore = sectionScores[`Блок ${blockNum}`] || 0;
         const blockResult = calculateTestResult(blockNum, blockScore) || 'Нет данных';
-        
+
         rowData[`block${blockNum}Score`] = blockScore;
         rowData[`block${blockNum}Result`] = blockResult;
 
@@ -463,8 +463,8 @@ async function exportToExcel(results) {
       row.eachCell((cell, colNumber) => {
         const column = columns[colNumber - 1];
         if (column.key.startsWith('block') && column.key.endsWith('Score') ||
-            column.key.startsWith('s') ||
-            column.key === 'totalScore') {
+          column.key.startsWith('s') ||
+          column.key === 'totalScore') {
           cell.numFmt = '0.00';
           cell.alignment = { horizontal: 'center' };
         } else if (column.key.endsWith('Result')) {
@@ -488,10 +488,10 @@ async function exportToExcel(results) {
 
     // Freeze header row and enable filters
     summarySheet.views = [
-      { 
-        state: 'frozen', 
-        xSplit: 0, 
-        ySplit: 1, 
+      {
+        state: 'frozen',
+        xSplit: 0,
+        ySplit: 1,
         activeCell: 'A2',
         showRowColHeaders: true,
         filterButton: true
@@ -512,7 +512,7 @@ async function exportToExcel(results) {
 app.post('/api/admin/login', (req, res) => {
   console.log('Login attempt:', req.body);
   console.log('Headers:', req.headers);
-  
+
   const { password } = req.body;
 
   if (password === 'admin123') {
@@ -529,7 +529,7 @@ app.post('/api/admin/login', (req, res) => {
 function authenticateToken(req, res, next) {
   console.log('Authenticating request to:', req.path);
   console.log('Auth headers:', req.headers.authorization);
-  
+
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
@@ -555,7 +555,7 @@ app.get('/api/questions', (req, res) => {
       console.error('Quiz data is not properly loaded');
       return res.status(500).json({ error: 'Quiz data is not available' });
     }
-    
+
     console.log('Sending quiz data. Number of sections:', quizData.length);
     res.json(quizData);
   } catch (error) {
@@ -566,10 +566,10 @@ app.get('/api/questions', (req, res) => {
 
 app.post('/api/results', async (req, res) => {
   const { firstName, lastName, sectionScores, totalScore, detailedAnswers } = req.body;
-  console.log('Saving results:', { 
-    firstName, 
-    lastName, 
-    totalScore, 
+  console.log('Saving results:', {
+    firstName,
+    lastName,
+    totalScore,
     sectionScores,
     answerCount: detailedAnswers?.length || 0
   });
@@ -647,8 +647,8 @@ app.post('/api/results', async (req, res) => {
 
       db.exec('COMMIT');
       console.log('Results saved successfully');
-      res.json({ 
-        success: true, 
+      res.json({
+        success: true,
         message: 'Results saved successfully',
         resultId: resultId
       });
@@ -702,7 +702,7 @@ function getFilteredResults(from, to, name) {
 
     console.log('Running query:', query, 'with params:', params);
     const results = db.prepare(query).all(...params);
-    
+
     return results.map(result => {
       // Parse section scores
       const sectionScores = {};
@@ -753,7 +753,7 @@ app.get('/api/results', authenticateToken, async (req, res) => {
   try {
     const { from, to, name, format } = req.query;
     console.log('Getting results with params:', { from, to, name, format });
-    
+
     const results = getFilteredResults(from, to, name);
     console.log(`Found ${results.length} results`);
 
@@ -832,10 +832,10 @@ app.post('/api/admin/init-db-tables', authenticateToken, async (req, res) => {
 app.post('/api/admin/reinit-db', authenticateToken, async (req, res) => {
   try {
     console.log('Reinitializing database...');
-    
+
     // Start transaction
     db.exec('BEGIN TRANSACTION');
-    
+
     try {
       // Drop existing tables
       db.exec(`
@@ -843,7 +843,7 @@ app.post('/api/admin/reinit-db', authenticateToken, async (req, res) => {
         DROP TABLE IF EXISTS section_scores;
         DROP TABLE IF EXISTS quiz_results;
       `);
-      
+
       // Recreate tables
       db.exec(`
         CREATE TABLE quiz_results (
@@ -894,13 +894,13 @@ app.post('/api/admin/reinit-db', authenticateToken, async (req, res) => {
 app.post('/api/admin/reset-database', authenticateToken, async (req, res) => {
   try {
     console.log('Resetting database...');
-    
+
     db.exec('BEGIN TRANSACTION');
     db.exec('DELETE FROM section_scores');
     db.exec('DELETE FROM detailed_answers');
     db.exec('DELETE FROM quiz_results');
     db.exec('COMMIT');
-    
+
     console.log('Database reset successfully');
     return res.json({ message: 'Database reset successfully' });
   } catch (error) {
@@ -914,7 +914,7 @@ app.post('/api/admin/reset-database', authenticateToken, async (req, res) => {
 app.delete('/api/results/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     // Check if result exists
     const result = db.prepare('SELECT id FROM quiz_results WHERE id = ?').get(id);
     if (!result) {
@@ -935,9 +935,9 @@ app.delete('/api/results/:id', authenticateToken, async (req, res) => {
     return res.json({ message: 'Result deleted successfully' });
   } catch (error) {
     console.error('Error in delete operation:', error);
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: 'Failed to delete result',
-      details: error.message 
+      details: error.message
     });
   }
 });
@@ -949,7 +949,7 @@ app.delete('/api/results', authenticateToken, async (req, res) => {
     db.exec('DELETE FROM detailed_answers');
     db.exec('DELETE FROM quiz_results');
     db.exec('COMMIT');
-    
+
     return res.json({ message: 'All results deleted successfully' });
   } catch (error) {
     db.exec('ROLLBACK');
